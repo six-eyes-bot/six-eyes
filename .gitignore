@@ -1,0 +1,56 @@
+# ─── Six Eyes ──────────────────────────────────────────────────
+# Secrets — never commit a filled .env
+.env
+.env.*
+!.env.example
+
+# Local databases and book state
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# Broker / book imports (raw statements, exports)
+imports/*.csv
+
+# Serialized objects and model weight caches
+*.pkl
+.cache/huggingface/
+.cache/
+
+# ─── Python ────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+.installed.cfg
+
+# Environments
+.venv/
+venv/
+env/
+ENV/
+
+# Test / type / lint caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# ─── OS / editor ───────────────────────────────────────────────
+.DS_Store
+*.swp
+*~
+.idea/
+.vscode/

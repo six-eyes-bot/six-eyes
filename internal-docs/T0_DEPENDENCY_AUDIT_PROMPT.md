@@ -8,7 +8,7 @@ You are running a research and measurement task. **Do not write application code
 
 ## Goal
 
-Select the dependency set for "The Desk" — an AI investment-committee system specified in `internal-docs/DESK_DESIGN.md` and `THE_DESK_TICKETS.md`. Optimize, in priority order:
+Select the dependency set for "The Desk" — an AI investment-committee system specified in `internal-docs/DESK_DESIGN.md` and `internal-docs/TICKETS.md`. Optimize, in priority order:
 
 1. **Reliability** — maintained, tested, unlikely to break or be abandoned
 2. **Dependency economy** — fewest distinct things relied on; prefer candidates sharing transitive deps
@@ -37,6 +37,9 @@ Do not select on stars. In the AI-finance niche specifically, star counts track 
 **Data:** OpenBB (+ its underlying providers), yfinance, finvizfinance, Alpha Vantage, Polygon, Finnhub, Tiingo, EODHD, FMP, SEC EDGAR, FRED
 
 **Ops:** LiteLLM, Langfuse, `NousResearch/hermes-agent`, LangGraph
+
+**Knowledge / research-retrieval layer (establish fit *before* measuring):**
+- `LLMQuant/quant-mind` (QuantMind) — MIT, agent-native knowledge-extraction and retrieval framework for quant finance: refines papers, news, and filings into typed, cited, timestamped knowledge for downstream retrieval. **Its fit is not established.** The Desk's required metrics (§1 W2) are overwhelmingly structured — prices, fundamentals, estimates, options, macro — and the only obvious consumer of an unstructured-knowledge/RAG layer is the News/Sentiment analyst node, with a possible secondary role feeding research/macro context. So answer the scoping question first: **does this system need a knowledge-extraction layer at all, and if so, which node(s) consume it?** If the honest answer is no, drop it with that reasoning and do not fold it into the recommended set — a null result here is a valid, cheap outcome. If yes, scope it narrowly, then measure it on the same axes as every other candidate (reliability, transitive footprint, install size) and report it as a **standalone line item, gated behind the fit decision** — never bundled into the core set. Treat it like the Kronos line below: measured, but scoped separately.
 
 **Forecasting (measure, but scope separately):** `shiyu-coder/Kronos` — MIT, 36.5k★. Slated as optional T16, gated behind T8. Measure its dependency footprint anyway: it brings PyTorch + HF transformers, and the install size number is what makes the keep/drop argument concrete. Report it as a standalone line item, not folded into the recommended set.
 
@@ -114,7 +117,7 @@ Write `internal-docs/adr/0001-dependency-selection.md`:
 - **Options Considered** — per decision point, with the measured table
 - **Trade-off Analysis** — say explicitly where reliability and dependency economy conflicted and which you chose. They *will* conflict: the most popular options in this space are also the heaviest.
 - **Consequences** — what gets easier, what gets harder, what needs revisiting
-- **Action Items** — which tickets in `THE_DESK_TICKETS.md` change, as a diff-style list. Do not edit that file.
+- **Action Items** — which tickets in `internal-docs/TICKETS.md` change, as a diff-style list. Do not edit that file.
 
 Also write `internal-docs/adr/0001-scoring.md`: the full raw measurement tables. Every number traceable to the command that produced it. Weights: reliability 40, dependency economy 30, subscription cost 30 — state them, apply them, and show the arithmetic so the human can re-weight without re-measuring.
 
@@ -122,7 +125,7 @@ Also write `internal-docs/adr/0001-scoring.md`: the full raw measurement tables.
 
 - Every claim carries a measured number or a fetched citation. Where a number couldn't be obtained, write "not measured" — never estimate and never present a README claim as a verified fact.
 - README claims are marketing until verified. "342 tests" means you cloned it and ran them.
-- If measurement contradicts a recommendation in `THE_DESK_TICKETS.md`, say so directly and show the evidence. Two of its recommendations were already wrong; assume more are.
+- If measurement contradicts a recommendation in `internal-docs/TICKETS.md`, say so directly and show the evidence. Two of its recommendations were already wrong; assume more are.
 - If the best answer is "keep the current pick," say that. A null result is a valid outcome and cheaper than a change.
-- Do not modify `THE_DESK_TICKETS.md`, `internal-docs/DESK_DESIGN.md`, or any application code. Recommend; don't apply.
+- Do not modify `internal-docs/TICKETS.md`, `internal-docs/DESK_DESIGN.md`, or any application code. Recommend; don't apply.
 - Timebox to roughly 90 minutes of tool time. If you're over, ship the ADR with the unmeasured items flagged rather than continuing.

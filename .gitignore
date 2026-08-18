@@ -1,8 +1,17 @@
 # ─── Six Eyes ──────────────────────────────────────────────────
+# THIS REPOSITORY IS PUBLIC. Anything committed here is world-readable and
+# remains in history after deletion. Never commit real positions, broker
+# statements, or API keys.
+
 # Secrets — never commit a filled .env
 .env
 .env.*
 !.env.example
+*.env
+.envrc
+secrets.*
+*.pem
+*.key
 
 # Local databases and book state
 *.db
@@ -10,8 +19,20 @@
 *.sqlite
 *.sqlite3
 
-# Broker / book imports (raw statements, exports)
-imports/*.csv
+# Broker / book imports (raw statements, exports).
+# Deny-all: Wells Fargo exports arrive as .pdf/.xlsx/.ofx/.qfx as well as
+# .csv, and DESK_DESIGN §4.5 requires the raw file be retained here
+# unmodified. A statement committed to a public repo publishes the book.
+imports/*
+!imports/.gitkeep
+
+# Live config. config/book.yaml holds real positions, stops, targets and
+# thesis links; config/desk.yaml holds risk limits and is the natural place
+# an API key gets pasted. Commit *.example.yaml templates instead.
+config/*.yaml
+config/*.yml
+!config/*.example.yaml
+!config/*.example.yml
 
 # Serialized objects and model weight caches
 *.pkl

@@ -22,7 +22,7 @@ Weights applied: **reliability 40 · dependency economy 30 · subscription cost 
 - **DEPEND** — installed by a package manager, upgraded over time, someone else's release cadence becomes our problem. Reliability metrics dominate: idle days, bus factor, release cadence, issue responsiveness.
 - **VENDOR** — copied into our tree, becomes our code, upstream stops mattering at the moment of the copy. Popularity is nearly irrelevant. What matters is licence, test coverage, size, and how many packages that specific module drags in.
 
-Classifying each candidate into the right mode turned out to be the highest-leverage judgement in this audit. The clearest case: `DanisHack/ai-hedge-fund` scores **59/100 as a DEPEND and 96/100 as a VENDOR**. Same repo, same measurements, same day. It is a bad dependency (185 days idle, bus factor 1, zero releases) and an excellent donor (MIT, **160** passing tests covering the modules taken, 1,853 relevant LOC, **zero net new packages**).
+Classifying each candidate into the right mode turned out to be the highest-leverage judgement in this audit. The clearest case: `DanisHack/ai-hedge-fund` scores **65/100 as a DEPEND and 96/100 as a VENDOR**. Same repo, same measurements, same day. It is a bad dependency (185 days idle, bus factor 1, zero releases) and an excellent donor (MIT, **160** passing tests covering the modules taken, 1,853 relevant LOC, **zero net new packages**).
 
 Star counts were used as one weak input and never as a tiebreak, per the brief. They earned their reputation here: the two most-starred candidates in the set — `TauricResearch/TradingAgents` (98.8k★) and `shiyu-coder/Kronos` (37.5k★) — are respectively the base we keep and the heaviest thing we refuse to install by default.
 
@@ -64,14 +64,14 @@ Recommended set — **142 unique Python packages** total (134 core + `scipy` fro
 
 | Candidate | Days idle | Commits | Contributors | Releases/12mo | Licence | Score |
 |---|---:|---:|---:|---:|---|---:|
-| **TauricResearch/TradingAgents** | 31 | 257 | 19 | 8 | Apache-2.0 | **74** |
-| virattt/ai-hedge-fund | 11 | 904 | 39 | 11 | MIT | 71 |
-| DanisHack/ai-hedge-fund *as DEPEND* | 185 | 26 | **1** | 0 | MIT | 59 |
-| DanisHack/ai-hedge-fund *as VENDOR* | — | — | — | — | MIT | **96** |
+| **TauricResearch/TradingAgents** | 31 | 257 | 19 | 8 | Apache-2.0 | **80.0** |
+| virattt/ai-hedge-fund | 11 | 904 | 39 | 11 | MIT | 77.0 — **gated out on fit**, not beaten on points |
+| DanisHack/ai-hedge-fund *as DEPEND* | 185 | 26 | **1** | 0 | MIT | 65.0 |
+| DanisHack/ai-hedge-fund *as VENDOR* | — | — | — | — | MIT | **96.0** |
 | td-02/ai-native-hedge-fund | 111 | 56 | 1 | 0 | **none** | disqualified |
 | bit-r/TradingAgents-AI-hedge-fund | 115 | 149 (all inherited) | 19 (inherited) | 0 | Apache-2.0 | disqualified |
 
-**Keep the current pick.** TradingAgents upstream stays the base. This is a null result and it is the cheapest outcome available.
+**Keep the current pick — but on fit, not on score.** A **fit gate** is applied before scoring: a candidate must reproduce DESK_DESIGN §1 W2's 14-node graph (bull/bear researcher, research manager, trader, risk manager, fund manager). `virattt` is a persona ensemble (Buffett, Burry, Wood…), not that graph, so it is gated out at 77.0 rather than beaten at 80.0 — it in fact leads TradingAgents on every measured reliability input. Stating this because the adversarial audit found the formula was being used to ratify a decision made on unstated grounds; see [scoring §9.2](0001-scoring.md). Among fit-passing candidates this is a null result and the cheapest outcome available.
 
 All three of TICKETS.md's upstream claims verified in the checkout:
 

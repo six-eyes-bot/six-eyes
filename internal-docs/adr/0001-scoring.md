@@ -921,11 +921,11 @@ econ = 10 - 10 * net_new_packages / 80
 cost = 10 - 1.5 * (usd_per_month / 50)
 ```
 
-Applying the econ rubric mechanically moves several scores that were previously judged rather than computed — Kronos 61→70.8, OpenBB 65→62.0, QuantMind 58→62.1, nautilus_trader 84→93.4. **No recommendation changes as a result**, because each of those was decided on licence or fit, not on score — which is itself the finding in §9.6.
+Applying the econ rubric mechanically moves several scores that were previously judged rather than computed — Kronos 61→70.8, OpenBB 65→62.0, QuantMind 58→64.0 (arithmetic) →62.1 (rubric), nautilus_trader 84→93.4. **No recommendation changes as a result**, because each of those was decided on licence or fit, not on score — which is itself the finding in §9.6.
 
 ### 9.2 The fit gate is now explicit — the formula did not make Decision 1
 
-The audit found the 40/30/30 formula was being used to ratify conclusions reached on unstated grounds. Confirmed: `nautilus_trader` now scores **93.4**, the highest of any candidate in this audit, and is rejected. `virattt` beats TradingAgents on every measured reliability input (11 vs 31 days idle, 11 vs 8 releases/12mo, 39 vs 19 contributors, 0h vs no response).
+The audit found the 40/30/30 formula was being used to ratify conclusions reached on unstated grounds. Confirmed: `nautilus_trader` now scores **93.4** — the highest-scoring *rejected* candidate, and third-highest overall behind DanisHack-as-VENDOR and LangGraph at 96.0 — and is rejected anyway. `virattt` beats TradingAgents on every measured reliability input (11 vs 31 days idle, 11 vs 8 releases/12mo, 39 vs 19 contributors, 0h vs no response).
 
 **Fix:** a **fit gate** is applied *before* scoring and stated plainly:
 
@@ -1027,6 +1027,8 @@ pip install .   (clean py3.11 venv, DanisHack repo root)
 
 Rubric econ = `10 − 10×8/80` = **9.0**, not the 7 asserted. **DanisHack-as-DEPEND is therefore 65.0, not 59.0.** The DEPEND→VENDOR swing is **65 → 96**, not 59 → 96. The point stands; the number was wrong.
 
+**`score.py` mixes rubric-computed and judged economy sub-scores.** `econ_from_net_new()` is applied to six rows; the rest carry judged values. Under the pure rubric `quantstats` would be 8.75 (→88.3) and `financetoolkit` 9.125 (→89.4), narrowing that margin from 3.0 to **1.1**. Same decision, much thinner. This is disclosed rather than silently reconciled because changing it moves nine scores and none of the decisions.
+
 *`virattt` footprint: probe did not complete — **not measured**. Its econ 5 remains unsupported, and it is gated out on fit regardless (§9.2).*
 
 ### 9.7 The `backtrader` retraction, propagated
@@ -1040,3 +1042,42 @@ The unbounded criterion *"No AGPL package in the environment"* is **withdrawn** 
 ### 9.8 Package count reconciled
 
 The document previously stated 134, 142 and 220 in different sections. **The recommended set is 142 packages** (verified: union of the TradingAgents git tree, the core ops set, `scipy`, and `financetoolkit`). OpenBB's marginal cost is **+86 packages on that 142 base (+61%)**, not "+64% on a 134-package base."
+
+### 9.9 The $19 tier has a coverage gap the remediation missed — found by the verification audit
+
+§9.3 checked what Premium adds over Starter and concluded UK/Canada coverage and 30-year history, both irrelevant here. **It missed the one that matters.** FMP's own plan cards, re-read on the live page:
+
+```
+Starter $19 : "... US Coverage · ANNUAL Fundamentals and Ratios · Historical Stock Price Data ..."
+Premium $49 : "... UK and Canada Coverage · FULL Fundamentals and Ratios · Intraday Charts ..."
+```
+
+DESK_DESIGN §1 W2 requires **`rev Q/Q`**. Annual statements cannot produce a quarter-over-quarter figure. **Starter does not deliver a fundamentals fallback for that metric**, and §3.2 billing `rev Q/Q` at `💲$19` contradicts §3.1's own plan-card row on the same page. The `Income Statement` row in §9.3's extraction carries no periodicity, so the DOM evidence does not resolve it either.
+
+**Does it sink the $19 recommendation? Measured, no — but only just.**
+
+```
+yfinance quarterly_income_stmt   (free, no key)
+  NVDA: shape (39, 5), cols 2026-04-30 … — Total Revenue 81,615,000,000 / 68,127,000,000
+        -> rev Q/Q = 19.80%   ✅ computes
+  SOUN: shape (55, 7) — Total Revenue latest quarter = NaN
+        -> rev Q/Q = nan      ⚠️ silent gap on a small cap
+```
+
+`rev Q/Q` therefore has a working free primary source, and paying **$360/year more** to gain a *fallback* for one derivable metric out of 26 is poor value. **Recommendation stays at $19 Starter**, with the gap recorded rather than hidden:
+
+- `rev Q/Q` is **single-sourced on yfinance** at the $19 tier. If a licensed fallback for it is required, the price is $49, not $19.
+- The SOUN result is a **fourth instance** of this project's recurring failure class — a NaN in the latest quarter, returned without error. The T2 per-field guard must treat NaN as missing, not as a value.
+
+### 9.10 Honest sensitivity — the paid tier is a close call resting on an unmeasured sub-score
+
+B19's 83.3 beats A's 80.0 by **3.3 points**, and that margin is driven almost entirely by FMP's reliability sub-score of **7 versus A's 5**. That 7 is an *estimate*: FMP has never been live-tested here — no key, no uptime observation, no latency measurement.
+
+| FMP reliability | B19 score | vs A (80.0) |
+|---:|---:|---|
+| 8 | 87.3 | pay |
+| **7 (used)** | **83.3** | **pay** |
+| 6 | 79.3 | **free wins** |
+| 5 | 75.3 | free wins |
+
+**A one-point move in an unmeasured sub-score flips the decision.** Stated plainly because the earlier draft of this audit presented the paid tier as clearly correct when it never was. $0 (Option A) remains defensible, and the ADR's own revisit clause — drop to $0 if T8 shows no edge — should be honoured with a **monthly**, not annual, subscription.

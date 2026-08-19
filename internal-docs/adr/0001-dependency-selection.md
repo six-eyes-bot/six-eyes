@@ -47,7 +47,7 @@ Recommended set — **142 unique Python packages** total (134 core + `scipy` fro
 | 8 | FRED (`fredgraph.csv` / API) | **DEPEND** (HTTP, no library) | Free, no key needed; the correct source for UST 10Y |
 | 9 | SEC EDGAR (`data.sec.gov`) | **DEPEND** (HTTP, no library) | Free, 10 req/s, declared UA; XBRL fundamentals + 13F |
 | 10 | `dafahentra/dcf-valuation-tool` — `dcf_engine.py`, 207 LOC | **VENDOR** | Canonical MIT; imports only numpy + scipy; **replaces the T9 pick, which is licence-blocked** |
-| 11 | **FMP Starter — $19/mo** | subscription | Estimates VERIFIED at Starter (scoring §9.3). Premium's UK/CA and 30y history are redundant — yfinance gives 27y free. Scores 83.3 vs $0's 80.0 and $49's 80.6 |
+| 11 | **FMP Starter — $19/mo, monthly not annual** | subscription | Estimates VERIFIED at Starter (§9.3). Scores 83.3 vs $0's 80.0 and $49's 80.6. **Two caveats, both measured:** Starter is *annual* fundamentals, so `rev Q/Q` stays single-sourced on yfinance (§9.9); and the 3.3-point margin over free rests on an unmeasured reliability estimate — at rel 6, free wins (§9.10) |
 | 12 | `NousResearch/hermes-agent` @ pinned SHA | **VENDOR** (pinned fork) | Per D2, unchanged — but see Consequences; its issue ratio is the worst measured |
 
 **Dropped:** OpenBB and `openbb-mcp-server` (Phase 4 below) · QuantMind (fit gate below) · `virattt/ai-hedge-fund` · `bit-r/TradingAgents-AI-hedge-fund` · `td-02` as a code source · Alpha Vantage · Finnhub · Tiingo · EODHD · Polygon/Massive · Finviz Elite.
@@ -149,7 +149,7 @@ Redone with star-bucketed `topic:` queries across the *functional* categories (s
 
 It ships `fmp_model.py` **and** `yfinance_model.py` — natively supporting both our chosen providers — plus its own MCP server. Co-installation with the full recommended set: `pip check` → *"No broken requirements found"*, `tradingagents 0.3.1` and `financetoolkit 2.2.0` both import under the resolved `pandas 3.0.5`.
 
-**`financetoolkit` replaces `quantstats`** (90.0 vs 83.0): cheaper, and it covers the T9 valuation CAPM plus enough of T6's indicator maths to cut hand-written code there.
+**`financetoolkit` replaces `quantstats`** (86.0 vs 83.0 — recomputed after execution lowered its reliability sub-score to 8; see scoring §9.4): cheaper, and it covers the T9 valuation CAPM plus enough of T6's indicator maths to cut hand-written code there.
 
 **DanisHack survives unchanged.** And the `win_rate` trap is now three-way — DanisHack counts profitable **round-trip trades**, quantstats counts **positive periods** (0.5140), and FinanceToolkit counts *"periods in which the asset's return exceeds the benchmark's"*. One name, three incompatible meanings, all plausible-looking. Nothing measured replaces round-trip trade accounting, so T8's expectancy gate stays on DanisHack.
 
@@ -224,7 +224,7 @@ The paid alternative that removes the *most* exposure is Option C at **$99/month
 
 ## Phase 4 — The OpenBB verdict
 
-**Recommendation: DROP. `openbb` + `openbb-mcp-server` add 86 packages (+64% on a 134-package base) and 300 MB, are licensed AGPL-3.0-only, and serve zero required metrics that the chosen direct providers do not.**
+**Recommendation: DROP. `openbb` + `openbb-mcp-server` add 86 packages (+61% on the 142-package recommended set) and 119 MB, are licensed AGPL-3.0-only, and serve zero required metrics that the chosen direct providers do not.**
 
 ### 1. Which required metrics does OpenBB serve that the direct providers don't?
 
@@ -243,7 +243,7 @@ The overlap matrix makes the redundancy exact: **`yfinance ∩ openbb = 23`** �
 | Core ops set alone | 96 | 400 MB |
 | Core ops set + `openbb` + `openbb-mcp-server` | 190 | 519 MB |
 | **Marginal cost of OpenBB** | **+94** | **+119 MB** |
-| Against the full recommended set (134 pkgs) | **+86** | — |
+| Against the full recommended set (142 pkgs) | **+86** | — |
 
 It also tightens the Python ceiling from `<3.15` to `<3.14` (binding constraint: `openbb-polygon`).
 
@@ -348,7 +348,7 @@ Draft 1 called removing `backtrader`/`redis` "zero functional cost" housekeeping
 - **Installing a copyleft package into a local virtualenv is not conveying it.** `backtrader` 1.9.78.123 is GPLv3+ and does land in the tree from an upstream `pyproject.toml` line — but nothing imports it, and publishing *our* source does not distribute *it*. The honest case for removal is **dead weight**: a 22.9k★ package, 729 days idle, zero imports. That is reason enough. It is not a copyleft exposure.
 - **The same reasoning must apply to OpenBB, and I withheld it.** At T1 nothing imports OpenBB either, so the venv argument would equally deflate the AGPL finding. Applying an argument only where it favours my own recommendation is exactly the failure this audit is supposed to catch.
 
-**OpenBB's exclusion survives, on the grounds that actually hold:** +86 packages (+64% on a 134-package base), +119 MB, **zero required metrics served that the direct providers don't**, and a tightened Python ceiling. Those are measured and decisive on their own.
+**OpenBB's exclusion survives, on the grounds that actually hold:** +86 packages (+61% on the 142-package recommended set), +119 MB, **zero required metrics served that the direct providers don't**, and a tightened Python ceiling. Those are measured and decisive on their own.
 
 The licence point survives too, but only in its correct and *stronger* form: the objection is not a package sitting in a venv — it is that `desk/data.py` would **import** OpenBB, and this repo is **public**, so we would be publishing source that forms a combined work with an AGPL-3.0 library. That is a real conveying argument. The venv framing was the weak one, and it was the one I used.
 
@@ -369,8 +369,8 @@ Consequently the Consequences/Action-Item criterion *"No AGPL package in the env
 **Easier**
 
 - One subscription, one invoice, $19/month. No API-key sprawl across five vendors.
-- 134 packages instead of 220. Faster CI, smaller images, fewer CVE surfaces to track.
-- No AGPL anywhere in the tree — T1's licence audit becomes a short document with a clean result.
+- 142 packages instead of 228. Faster CI, smaller images, fewer CVE surfaces to track.
+- No GPL/AGPL-classified distribution in the resolved environment, asserted by a test rather than by a grep — T1's licence audit becomes short and checkable.
 - T9 drops further than TICKETS.md hoped: `dcf_engine.py` is 207 LOC with no data coupling, so "repoint at `desk/data.py`" is not a code change at all, just a caller that passes a dict.
 - Vendoring DanisHack brings 160 passing tests (over the modules taken) into a repo that currently has none.
 
@@ -405,12 +405,14 @@ Diff-style against `internal-docs/TICKETS.md`. **That file is not modified by th
 + Install TradingAgents FROM GIT at a pinned SHA. Do NOT `pip install tradingagents` —
 +   that PyPI name resolves to Mai0313/tradingagents (v0.7.0, MIT), not upstream
 +   (v0.3.1, Apache-2.0).
-+ LICENCE-CRITICAL: in our fork, delete the unused `backtrader` and `redis`
-+   declarations from pyproject.toml. `backtrader` is GPLv3+ and IS currently
-+   installed in the tree by `pip install git+TradingAgents`, from a declaration
-+   no code imports. Public repo + GPL copyleft = the same exposure class as the
-+   OpenBB AGPL finding. Verify after removal:
-+     pip list | grep -Ei 'backtrader|redis'   # must return nothing
++ In our fork, delete the unused `backtrader` and `redis` declarations from
++   pyproject.toml. Reason is DEAD WEIGHT, not copyleft: `backtrader` is GPLv3+
++   and does install from a declaration no code imports, but installing a
++   copyleft package into a local venv is NOT conveying it. The earlier
++   "same exposure class as OpenBB" framing is WITHDRAWN (scoring 9.7).
++   Enforce with the invariant test, not a grep:
++     no distribution in the resolved environment carries a GPL/AGPL
++     classifier -- asserted in tests/test_invariants.py
   Run a license audit ... record it in internal-docs/LICENSES.md
 + The audit must cover: OpenBB = AGPL-3.0-only (now moot if dropped);
 +   EmanueleSturzo = defective MIT, no modify grant (see T9);
@@ -422,15 +424,21 @@ Diff-style against `internal-docs/TICKETS.md`. **That file is not modified by th
 ```diff
 - MarketData protocol satisfied by OpenBB MCP (primary), yfinance (fallback),
 -   and finvizfinance (screener + fundamentals)
-+ MarketData protocol satisfied by yfinance (primary), FMP Premium (fallback),
++ MarketData protocol satisfied by yfinance (primary), FMP Starter (fallback),
 +   FRED (macro/rates), SEC EDGAR (XBRL fundamentals + 13F),
 +   and finvizfinance (SCREENER ONLY).
 + finvizfinance.ticker_fundament() raises AttributeError on every ticker tested
 +   (NVDA, AAPL) as of 2026-08-18. Do not build fundamentals on it.
 + Route UST 10Y to FRED DGS10, never to yfinance ^TNX:
 +   ^TNX history(period="2y") returns 17 rows instead of ~500, silently.
-+ MANDATORY: every historical series gets a minimum-row-count assertion.
-+   A short series must raise, not return. This is the check that catches ^TNX.
++ MANDATORY guards -- a row-count floor ALONE is insufficient (scoring 9.5):
++   (a) historical series: minimum-row-count assertion. Catches ^TNX.
++   (b) .info scalars (options IV, shortPercentOfFloat, shortRatio): per-FIELD
++       schema assertion. The failure mode there is a MISSING KEY, not a short
++       series -- as revenueQuarterlyGrowth already demonstrates.
++   (c) explicit ticker-liveness check. Measured: delisted tickers (TIVO, GIV --
++       both in DESK_DESIGN's own example book) return ALL-MISS across every
++       field with no exception raised.
 ```
 
 **T4 — Exit-rule engine** · **T8 — Eval harness** · **T12 — Ticket sizing**

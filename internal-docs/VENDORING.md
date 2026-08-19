@@ -41,10 +41,28 @@ The SHA also goes in `versions.lock`. A vendored directory without `PROVENANCE.m
 A glob like `exclude = ["engine/"]` exempts everything in that directory *forever* — including the four analyst nodes T6 adds **inside** `engine/`, which are the highest-value net-new files in Track B. They would be born outside lint, typing and tests and nobody would notice.
 
 ```bash
-make vendor-manifest      # writes engine/.vendored-manifest from the pinned SHA
+make vendor-manifest      # fetches the PINNED UPSTREAM SHA and writes
+                          # engine/.vendored-manifest as `sha256<space>path`
+make tooling-config       # regenerates ruff/mypy/pytest exclusions FROM it
 ```
 
-Ruff and mypy exclude exactly the files in that manifest. Anything else under `engine/` is **ours** and is checked. `tests/test_invariants.py` asserts the exclusion list still equals the manifest, so the two cannot drift apart silently.
+**The manifest is generated from the pinned upstream SHA, never from the local
+working tree.** Listing the local tree is the obvious implementation and it is
+wrong: re-running it after T6 would silently re-bless T6's new files as
+vendored and exempt them forever. It fails closed if upstream is unreachable.
+
+Each tool needs a different mechanism, and the obvious one is wrong in two of
+the three cases:
+
+| Tool | Mechanism | Why not the obvious one |
+|---|---|---|
+| ruff | `extend-exclude` = explicit paths | a glob exempts T6's files forever |
+| mypy | per-module `ignore_errors` | mypy's `exclude` does **not** stop analysis of an excluded module that is *imported* |
+| pytest | `testpaths` + `norecursedirs` | otherwise it collects the upstream's own tests |
+
+The manifest carries a **sha256 per file** and an invariant asserts contents
+still match — without it, an in-place edit to vendored source is invisible to
+CI, which would undermine the Apache-2.0 statement-of-changes obligation. Anything else under `engine/` is **ours** and is checked. `tests/test_invariants.py` asserts the exclusion list still equals the manifest, so the two cannot drift apart silently.
 
 Regenerate the manifest **only** when deliberately re-syncing to a new upstream SHA, and say so in the commit message.
 
@@ -60,13 +78,27 @@ ignore_missing_imports = true
 
 Adding a name here is a review-worthy change. A global `ignore_missing_imports = true` silently disables type checking against every dependency and must not be used.
 
+## 4b. What NOT to vendor, and which way imports point
+
+Vendoring a whole project drags in files that fight your tooling. **Omit these and record the omission** in `PROVENANCE.md`:
+
+| File | Why |
+|---|---|
+| upstream `pyproject.toml` | uv treats a nested one as a workspace member; ruff resolves settings from the *nearest* one |
+| upstream `tests/`, `conftest.py` | a second top-level `tests` package → mypy "duplicate module" and pytest rootdir errors |
+| upstream `.github/` | their CI is not ours |
+
+**Dependency direction: vendored code may import first-party code; first-party code must never import vendored code.** T6 puts our analyst nodes *inside* `engine/` and they call `desk.data`. Stating the rule so nobody invents a different one.
+
+Prefer **a copy at a pinned SHA over `git subtree`** — a copy adds one commit, and re-vendoring is a fresh copy rather than a merge conflict.
+
 ## 5. Licence hygiene
 
-- Copy the upstream `LICENSE` into the vendored directory. Apache-2.0 additionally requires retaining `NOTICE` and **stating your changes** (§2 above).
+- Copy the upstream `LICENSE` into the vendored directory. Apache-2.0 §4(b) requires **stating your changes** (§2 above). §4(d) requires retaining `NOTICE` **only if upstream ships one** — check before asserting it. (Measured: TradingAgents ships `LICENSE`, no `NOTICE`.)
 - Record the vendoring in `internal-docs/LICENSES.md` — factually, dated and SHA-stamped. That file is public; see its header.
 - **Never vendor from a repo with no LICENCE.** `td-02/ai-native-hedge-fund` has none — its hash-chained audit-log *idea* may be read and reimplemented, but no line of its code may be copied.
 - **Check the grant clause, not the title.** `EmanueleSturzo/DCF-Valuation-Model`'s LICENSE is headed "MIT License" but deletes `modify` and `merge` from the grant and omits the warranty disclaimer. It cannot be vendored-and-adapted. Read the text.
-- The invariant test asserts no GPL/AGPL-classified distribution is in the resolved environment.
+- The invariant test asserts no GPL/AGPL distribution is in the resolved environment. It must read **`License-Expression`, `License` and Trove classifiers** — PEP 639 packages often carry no classifier at all, so a classifier-only check passes real GPL wheels. Absence of all three is **unknown, not clean**.
 
 ## 6. Tests come with the code
 

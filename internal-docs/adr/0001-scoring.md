@@ -925,7 +925,7 @@ Applying the econ rubric mechanically moves several scores that were previously 
 
 ### 9.2 The fit gate is now explicit — the formula did not make Decision 1
 
-The audit found the 40/30/30 formula was being used to ratify conclusions reached on unstated grounds. Confirmed: `nautilus_trader` now scores **93.4** — the highest-scoring *rejected* candidate, and third-highest overall behind DanisHack-as-VENDOR and LangGraph at 96.0 — and is rejected anyway. `virattt` beats TradingAgents on every measured reliability input (11 vs 31 days idle, 11 vs 8 releases/12mo, 39 vs 19 contributors, 0h vs no response).
+The audit found the 40/30/30 formula was being used to ratify conclusions reached on unstated grounds. Confirmed: `nautilus_trader` now scores **93.4** — the highest-scoring *rejected* candidate, and fourth overall behind build-from-scratch (100.0), DanisHack-as-VENDOR (96.0) and langgraph (96.0) — and is rejected anyway. `virattt` beats TradingAgents on every measured reliability input (11 vs 31 days idle, 11 vs 8 releases/12mo, 39 vs 19 contributors, 0h vs no response).
 
 **Fix:** a **fit gate** is applied *before* scoring and stated plainly:
 
@@ -1027,7 +1027,7 @@ pip install .   (clean py3.11 venv, DanisHack repo root)
 
 Rubric econ = `10 − 10×8/80` = **9.0**, not the 7 asserted. **DanisHack-as-DEPEND is therefore 65.0, not 59.0.** The DEPEND→VENDOR swing is **65 → 96**, not 59 → 96. The point stands; the number was wrong.
 
-**`score.py` mixes rubric-computed and judged economy sub-scores.** `econ_from_net_new()` is applied to six rows; the rest carry judged values. Under the pure rubric `quantstats` would be 8.75 (→88.3) and `financetoolkit` 9.125 (→89.4), narrowing that margin from 3.0 to **1.1**. Same decision, much thinner. This is disclosed rather than silently reconciled because changing it moves nine scores and none of the decisions.
+**`score.py` mixes rubric-computed and judged economy sub-scores.** `econ_from_net_new()` is applied to six rows; the rest carry judged values. Under the pure rubric `quantstats` would be 8.75 (→88.2) and `financetoolkit` 9.125 (→89.4), narrowing that margin from 3.0 to **1.2**. Same decision, much thinner. This is disclosed rather than silently reconciled because changing it moves nine scores and none of the decisions. For completeness the two largest moves are `ffn` 77.0→86.8 and `bt` 74.0→86.0 — `bt` would tie `financetoolkit`'s current 86.0, which is worth knowing even though both are rejected on fit.
 
 *`virattt` footprint: probe did not complete — **not measured**. Its econ 5 remains unsupported, and it is gated out on fit regardless (§9.2).*
 

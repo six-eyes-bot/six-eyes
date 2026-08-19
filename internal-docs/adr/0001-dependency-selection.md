@@ -132,7 +132,7 @@ The first pass verified the candidate list it was given but never ran the active
 
 **Why `quantstats` (83) over `empyrical-reloaded` (74.5),** despite empyrical costing 2 net-new packages against quantstats' 10: empyrical-reloaded is 248 days idle with **zero releases in 12 months**, and its upstream `quantopian/empyrical` has been dead **753 days**. quantstats is 29 days idle, 5 releases, 30 contributors, Apache-2.0 — and it is the one that has drawdown duration. Eight of its ten net-new packages are matplotlib/seaborn plotting we do not need; that is the real cost of this choice and reliability outweighs it at 40/30/30.
 
-**Rejected with numbers:** `backtesting.py` (**AGPL-3.0**) · `backtrader` (**GPL-3.0**, 729 days idle — see Trade-offs) · `vectorbt` (**Apache-2.0 + Commons Clause**, non-OSI; **40 net-new packages, 652 MB**) · `nautilus_trader` (scores 84, rejected on fit — an event-driven live-execution platform, structurally opposed to D5) · `ffn`/`bt` (14/16 net-new incl. scikit-learn; weight-rebalancing model, not discrete tickets) · `PyPortfolioOpt`/`Riskfolio-Lib`/`skfolio` (solve mean-variance *allocation*; we need a correlation *cap*, which is 30 lines DanisHack already has) · `qlib` (478 open issues, 0 releases/12mo) · `zipline-reloaded` (223 days idle).
+**Rejected with numbers:** `backtesting.py` (**AGPL-3.0**) · `backtrader` (**GPL-3.0**, 729 days idle — see Trade-offs) · `vectorbt` (**Apache-2.0 + Commons Clause**, non-OSI; **40 net-new packages, 652 MB**) · `nautilus_trader` (scores **93.4** — higher than anything adopted bar DanisHack-as-VENDOR and langgraph at 96.0 — and rejected on fit anyway: an event-driven live-execution platform, structurally opposed to D5) · `ffn`/`bt` (14/16 net-new incl. scikit-learn; weight-rebalancing model, not discrete tickets) · `PyPortfolioOpt`/`Riskfolio-Lib`/`skfolio` (solve mean-variance *allocation*; we need a correlation *cap*, which is 30 lines DanisHack already has) · `qlib` (478 open issues, 0 releases/12mo) · `zipline-reloaded` (223 days idle).
 
 ### Decision 2c — Round 3: the sweep redone properly
 
@@ -190,20 +190,20 @@ Full coverage-by-cost matrix in [`0001-scoring.md` §3.2](0001-scoring.md). The 
 | Option | Monthly | Verdict |
 |---|---:|---|
 | **A** — yfinance + FRED + SEC + finviz(screener) | **$0** | Covers everything. Zero contractual guarantees. |
-| **B19** — A + FMP **Starter** | **$19** | **Recommended.** Estimates verified at this tier (§9.3). Score 83.3 |
-| B49 — A + FMP Premium | $49 | Score 80.6. UK/CA + 30y history both redundant here |
+| **B19** — A + FMP **Starter** | **$19** | **Recommended.** Estimates verified at this tier (§9.3). Score 83.3. **Caveat: Starter is *annual* fundamentals, so `rev Q/Q` stays single-sourced on yfinance (§9.9)** |
+| B49 — A + FMP Premium | $49 | Score 80.6. UK/CA + 30y history are redundant — but **quarterly fundamentals are not**. This is the tier that would give `rev Q/Q` a licensed fallback, for $360/yr more |
 | C — A + FMP Ultimate | $99 | +13F holdings, +3,000 rpm. Not needed yet. |
 | E — A + EODHD ALL-IN-ONE | $99.99 | Pays $100 and removes no dependency. |
 | D — Finnhub All-In-One | **$3,500** | See below. |
 
 **The cheapest set covering every required metric is $0/month.** That is the honest answer and it should be stated plainly rather than dressed up.
 
-**The recommendation is $19/month anyway**, because coverage is not the thing being bought. (Originally $49 Premium; the adversarial audit forced the estimates-tier question to be resolved, and estimates turn out to be available at Starter $19 with US coverage — [scoring §9.3](0001-scoring.md). Premium's UK/Canada and 30-year history are both redundant here.) Two measurements explain why a paid fallback is worth anything at all:
+**The recommendation is $19/month anyway**, because coverage is not the thing being bought. (Originally $49 Premium; the adversarial audit forced the estimates-tier question to be resolved, and estimates turn out to be available at Starter $19 with US coverage — [scoring §9.3](0001-scoring.md). Premium's UK/Canada and 30-year history are redundant — but **Starter is *annual* fundamentals, so `rev Q/Q` has no licensed fallback at $19**; it stays on yfinance, which supplies it free and was verified doing so, §9.9.) Two measurements explain why a paid fallback is worth anything at all:
 
 - `^TNX` (UST 10Y) via yfinance returns **17 rows for `period="2y"`** and 16 rows for an explicit two-year `start`/`end` — but 1,254 rows for `period="5y"`. No exception. No warning. A macro analyst would compute "UST 10Y y/y" from three weeks of data and report it with full confidence. Mitigated here by routing UST 10Y to FRED (`DGS10`, **16,859 observations**, keyless) — but the class of failure is not mitigated, only this instance of it.
 - `finvizfinance('NVDA').ticker_fundament()` raises `AttributeError: 'NoneType' object has no attribute 'find_all'` — reproducible on AAPL too. The library last shipped 226 days ago and its median first response on recent closed issues is **4,107 hours (171 days)**. TICKETS.md T2 assigns it "screener **+ fundamentals**"; the fundamentals half is broken today.
 
-$19 buys a licensed second source for fundamentals, estimates and technicals with US coverage and 300 rpm — five years of history rather than thirty, which is irrelevant because yfinance already supplies a measured 27 years free. It does **not** remove yfinance, because no provider measured sells options-chain IV *and* short interest below $99.99, and none sells both together under $3,500.
+$19 buys a licensed second source for **annual** fundamentals, estimates and technicals with US coverage and 300 rpm — quarterly statements, and therefore a fallback for `rev Q/Q`, are Premium-only — five years of history rather than thirty, which is irrelevant because yfinance already supplies a measured 27 years free. It does **not** remove yfinance, because no provider measured sells options-chain IV *and* short interest below $99.99, and none sells both together under $3,500.
 
 **Finnhub deserves a specific note** because DESK_DESIGN §3 still treats it as a primary. Its pricing has bifurcated: a market-data ladder at $49.99/$129.99/$199.99 that is **price and OHLC only**, and a fundamentals ladder that goes **free → $3,500/month with nothing in between**. The free tier has no financials, no estimates, no ownership and no OHLC history. Finnhub is unusable for The Desk at any price we would pay.
 
@@ -302,7 +302,7 @@ QuantMind's stated purpose is refining **papers, news, and filings** into typed,
 
 So the honest answer is **no**. Adopting a knowledge-extraction framework to improve one of fourteen nodes, where that node already has a working data path, is not a fit.
 
-The cost side confirms it without being the reason: QuantMind installed from its git checkout is **140 packages / 613 MB**, of which **69 are new** to our tree — `llama-index-core`, `llama-index-retrievers-bm25`, `bm25s`, `pymupdf`, `trafilatura`, `arxiv`, `openai-agents`, `ipykernel`/`ipython`, and a `full` extra pulling `sentence-transformers`. That is a **+51% package increase to serve 1/14 of the graph.**
+The cost side confirms it without being the reason: QuantMind installed from its git checkout is **140 packages / 613 MB**, of which **69 are new** to our tree — `llama-index-core`, `llama-index-retrievers-bm25`, `bm25s`, `pymupdf`, `trafilatura`, `arxiv`, `openai-agents`, `ipykernel`/`ipython`, and a `full` extra pulling `sentence-transformers`. That is a **+49% package increase to serve 1/14 of the graph.**
 
 Two things worth recording for whoever revisits this:
 
@@ -358,9 +358,9 @@ Consequently the Consequences/Action-Item criterion *"No AGPL package in the env
 
 **3. Data providers: economy and cost both lost to reliability, for $19/month.** Option A covers every required metric for **$0** and scores 80.0; B19 scores 83.3. Strictly on criteria 2 and 3, paying anything is the wrong call. Criterion 1 outranks both, and two measured live failures — `^TNX` returning 17 bars without an error, finvizfinance's fundamentals scraper throwing on every ticker — are what $19 is insuring against. **The uncomfortable part, stated plainly: $19 does not remove the fragile dependency. It only gives us somewhere to fail over to.** yfinance stays on the critical path for options and short interest at every price point below $3,500/month. The margin over free is 3.3 points, so this is a close call that a modest re-weighting toward cost would flip — run `score.py` before re-litigating it.
 
-**4. OpenBB: the two criteria agreed, which is rare enough to note.** +86 packages is the worst economy score in the audit, and it serves no unique metric. Even re-weighted to reliability 60 / economy 10 / cost 30 it only reaches 79/100 — and the AGPL question is a licence matter that no weighting touches.
+**4. OpenBB: the two criteria agreed, which is rare enough to note.** +86 packages is the worst economy score in the audit, and it serves no unique metric. Even re-weighted to reliability 60 / economy 10 / cost 30 it only reaches 78.0/100 — and the AGPL question is a licence matter that no weighting touches.
 
-**5. The brief predicted this and was right.** "The most popular options in this space are also the heaviest." OpenBB: 72.0k★, +86 packages, dropped. Kronos: 37.5k★, 987 MB, gated. TradingAgents: 98.8k★, 107 packages, kept — because it is the one case where the weight buys something we cannot cheaply rebuild. And the highest-scoring single item in the whole audit is a **19-star repo with 0 forks** that nobody has touched in six months.
+**5. The brief predicted this and was right.** "The most popular options in this space are also the heaviest." OpenBB: 72.0k★, +86 packages, dropped. Kronos: 37.5k★, 987 MB, gated. TradingAgents: 98.8k★, 107 packages, kept — because it is the one case where the weight buys something we cannot cheaply rebuild. And among adopted items the top score is shared by a **19-star repo with 0 forks** that nobody has touched in six months (DanisHack-as-VENDOR, 96.0) and `langgraph` (96.0).
 
 ---
 
@@ -369,14 +369,14 @@ Consequently the Consequences/Action-Item criterion *"No AGPL package in the env
 **Easier**
 
 - One subscription, one invoice, $19/month. No API-key sprawl across five vendors.
-- 142 packages instead of 228. Faster CI, smaller images, fewer CVE surfaces to track.
+- 142 packages instead of 211 (the same set with OpenBB re-added). Faster CI, smaller images, fewer CVE surfaces to track.
 - No GPL/AGPL-classified distribution in the resolved environment, asserted by a test rather than by a grep — T1's licence audit becomes short and checkable.
 - T9 drops further than TICKETS.md hoped: `dcf_engine.py` is 207 LOC with no data coupling, so "repoint at `desk/data.py`" is not a code change at all, just a caller that passes a dict.
 - Vendoring DanisHack brings 160 passing tests (over the modules taken) into a repo that currently has none.
 
 **Harder**
 
-- **yfinance is on the critical path and it is fragile.** Two live failures measured today. Every `desk/data.py` call needs a sanity assertion — *specifically* a row-count floor on every historical series, which is the exact check that would have caught `^TNX`.
+- **yfinance is on the critical path and it is fragile.** Two live failures measured today. Every `desk/data.py` call needs a sanity assertion, and a row-count floor alone is **not** enough — see T2's three guards (row-count for series, per-field schema for `.info` scalars, and a ticker-liveness check). The row-count floor catches `^TNX`; only the per-field guard catches a missing key or a NaN.
 - **finvizfinance's fundamentals are broken now**, so T2 and T11 must be re-scoped to screener-only. Its 171-day median issue response means waiting for a fix is not a plan.
 - Three vendored codebases means three sets of someone else's assumptions. TICKETS.md already flags this and is right; dropping OpenBB does not reduce it.
 - We own the vendored code. No upstream will patch it.
@@ -435,7 +435,8 @@ Diff-style against `internal-docs/TICKETS.md`. **That file is not modified by th
 +   (a) historical series: minimum-row-count assertion. Catches ^TNX.
 +   (b) .info scalars (options IV, shortPercentOfFloat, shortRatio): per-FIELD
 +       schema assertion. The failure mode there is a MISSING KEY, not a short
-+       series -- as revenueQuarterlyGrowth already demonstrates.
++       series -- as revenueQuarterlyGrowth already demonstrates. TREAT NaN AS
++       MISSING, not as a value: SOUN's latest quarterly revenue is NaN.
 +   (c) explicit ticker-liveness check. Measured: delisted tickers (TIVO, GIV --
 +       both in DESK_DESIGN's own example book) return ALL-MISS across every
 +       field with no exception raised.
@@ -555,7 +556,12 @@ Diff-style against `internal-docs/TICKETS.md`. **That file is not modified by th
 
 **New — T18 · Data provider subscription**
 ```diff
-+ Subscribe to FMP STARTER, $19/mo. NOT Premium.
++ Subscribe to FMP STARTER, $19/mo, MONTHLY not annual. NOT Premium.
++ KNOWN GAP, accept deliberately: Starter is ANNUAL fundamentals. DESK_DESIGN
++   1 W2 requires rev Q/Q, so that metric stays SINGLE-SOURCED on yfinance.
++   Verified yfinance quarterly_income_stmt supplies it free (NVDA 19.80%),
++   but SOUN returned NaN for the latest quarter. If a licensed fallback for
++   rev Q/Q is wanted, the price is \$49 Premium, not \$19.
 +   Estimates + price-target consensus are at Starter with US coverage
 +   (verified 2026-08-18, scoring section 9.3). Premium's UK/CA coverage is
 +   irrelevant (US-only equities) and its 30y history is redundant against

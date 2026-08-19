@@ -448,7 +448,7 @@ Sub-scores that would move under a different weighting, and the raw number drivi
 | DanisHack (VENDOR) | 9 | 10 | 10 | **0 net new packages** for 1,853 LOC |
 | dafahentra | 7 | 9 | 10 | +1 package (`scipy`) for 207 LOC |
 | Data set B | 8 | 9 | 8.5 | $49/mo, no new packages |
-| OpenBB | 8 | 1 | 10 | **+86 packages** on a 134-package base |
+| OpenBB | 8 | 1 | 10 | **+86 packages** on the 142-package recommended set |
 | Kronos | 4 | 5 | 10 | +14 packages / +987 MB |
 | QuantMind | 7 | 2 | 10 | +69 packages |
 

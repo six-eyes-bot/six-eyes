@@ -234,7 +234,6 @@ PROSE_ALLOWLIST = {
     "90.0": "§8.7 pre-remediation financetoolkit score, cited in §9.1 as corrected",
     "86.7": "§9.1 records the pre-remediation Option B score being corrected",
     "64.0": "§9.1 records QuantMind arithmetic fix before the rubric was applied",
-    "88.2": "§9.6 rubric-alternative for quantstats",
     "86.0": "produced by ROWS (bt, langfuse) - belt and braces",
 }
 

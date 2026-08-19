@@ -89,10 +89,13 @@ jobs:
       # T1 adds pyproject.toml, the desk/ package and pytest/ruff/mypy behind
       # `make test`. Until then this step is a no-op that reports honestly
       # rather than silently passing an empty suite.
+      # `make test` alone would run against a bare setup-python with zero
+      # dependencies installed, so the invariant assertions would fail on the
+      # very PR that introduces them. Provision first.
       - name: application suite
         run: |
           if [ -f Makefile ] && grep -qE '^test:' Makefile; then
-            make test
+            make setup && make test
           else
             echo "No Makefile test target yet (T1 adds it). Skipping."
           fi

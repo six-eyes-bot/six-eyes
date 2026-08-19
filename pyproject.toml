@@ -29,6 +29,7 @@ dev = [
     "pytest>=8",
     "ruff>=0.6",
     "mypy>=1.11",
+    "pandas-stubs",
     "pip-tools>=7",
 ]
 
@@ -60,17 +61,15 @@ warn_unused_configs = true
 warn_redundant_casts = true
 warn_unused_ignores = true
 # NOT `ignore_missing_imports = true` globally -- that silently disables type
-# checking against every dependency. Granted per module below, and adding a
-# name here is a review-worthy change (see internal-docs/VENDORING.md).
-[[tool.mypy.overrides]]
-module = [
-    "yfinance.*",
-    "finvizfinance.*",
-    "financetoolkit.*",
-    "litellm.*",
-    "langfuse.*",
-]
-ignore_missing_imports = true
+# checking against every dependency.
+#
+# There is deliberately no overrides block yet. T1 imports none of the untyped
+# libraries, and `warn_unused_configs` correctly flags a pre-declared exemption
+# for an import that does not exist. T2 adds entries here as it actually
+# imports yfinance / finvizfinance / financetoolkit -- one module at a time,
+# each a review-worthy change. See internal-docs/VENDORING.md section 4.
+#
+# pandas is typed via `pandas-stubs` (a dev dependency), not exempted.
 
 # ---------------------------------------------------------------------------
 # pytest

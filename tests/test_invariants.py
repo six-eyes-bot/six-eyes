@@ -49,30 +49,47 @@ def _licence_facts(dist) -> tuple[str | None, str | None, list[str]]:
     )
 
 
+#: A declaration is short ("GPL-3.0-or-later", "BSD"). Anything longer is the
+#: full licence *text* bundled into the metadata field, and grepping prose for
+#: "GPL" finds discussion of the GPL, not a declaration of it.
+#: Measured: pandas 3.0.5 ships a 52,990-character License field containing the
+#: PSF licence, whose GPL-compatibility discussion matched a naive regex and
+#: flagged a BSD-3-Clause package as copyleft.
+MAX_DECLARATION_CHARS = 200
+
+
+def _verdict(text: str) -> bool:
+    return bool(_COPYLEFT.search(text)) and not _LGPL.search(text)
+
+
 def is_strong_copyleft(
     license_expression: str | None,
     license_field: str | None,
     classifiers: list[str],
 ) -> bool | None:
-    """True / False / None for unknown.
+    """True / False / None-for-unknown, by source precedence.
 
-    Reads all three metadata surfaces. A classifier-only check is not enough:
-    PEP 639 packages emit `License-Expression: GPL-3.0-or-later` and frequently
-    carry no Trove classifier at all, so a real GPL wheel would pass while a
-    synthetic fixture written *with* a classifier "proves" the check works.
+    Structured metadata is authoritative and free text is a last resort:
 
-    Returns None when nothing is declared — that is *unknown, not clean*, and
+      1. `License-Expression` (PEP 639) — authoritative if present. A
+         classifier-only check misses these entirely: PEP 639 packages emit
+         `License-Expression: GPL-3.0-or-later` and often carry no classifier,
+         so a real GPL wheel would pass.
+      2. Trove classifiers — authoritative if present. Any single copyleft
+         classifier is enough; dual-licensed packages are treated conservatively.
+      3. The legacy `License` field — only when it is short enough to be a
+         declaration rather than embedded licence text.
+
+    Returns None when nothing usable is declared. That is *unknown, not clean*;
     the caller decides. Recorded as policy in internal-docs/LICENSES.md.
     """
-    haystacks = [h for h in (license_expression, license_field, *classifiers) if h]
-    if not haystacks:
-        return None
-    for h in haystacks:
-        if _LGPL.search(h):
-            continue
-        if _COPYLEFT.search(h):
-            return True
-    return False
+    if license_expression:
+        return _verdict(license_expression)
+    if classifiers:
+        return any(_verdict(c) for c in classifiers)
+    if license_field and len(license_field) <= MAX_DECLARATION_CHARS:
+        return _verdict(license_field)
+    return None
 
 
 # --------------------------------------------------------------------------
@@ -187,3 +204,30 @@ class TestCopyleftDetectorCanFail:
 
     def test_absent_metadata_is_unknown_not_clean(self) -> None:
         assert is_strong_copyleft(None, None, []) is None
+
+    def test_bundled_licence_text_mentioning_gpl_is_not_a_declaration(self) -> None:
+        """Regression: pandas 3.0.5 failed this check on 2026-08-19.
+
+        Its License field is 52,990 chars of bundled text including the PSF
+        licence, which says "GPL-compatible" and "unlike the GPL". Those are
+        statements *about* the GPL. Its classifier says BSD.
+        """
+        bundled = (
+            "Historically, most, but not all, Python releases have also been "
+            "GPL-compatible. GPL-compatible doesn't mean that we're distributing "
+            "Python under the GPL. All Python licenses, unlike the GPL, let you "
+            "distribute a modified version without making your changes open source. "
+        ) * 40
+        assert len(bundled) > MAX_DECLARATION_CHARS
+        assert is_strong_copyleft(
+            None, bundled, ["License :: OSI Approved :: BSD License"]
+        ) is False
+        # and with no classifier to fall back on, it is unknown -- never a
+        # false accusation drawn from prose
+        assert is_strong_copyleft(None, bundled, []) is None
+
+    def test_structured_metadata_wins_over_prose(self) -> None:
+        # a genuine GPL expression is not excused by a permissive classifier
+        assert is_strong_copyleft(
+            "GPL-3.0-only", None, ["License :: OSI Approved :: MIT License"]
+        ) is True

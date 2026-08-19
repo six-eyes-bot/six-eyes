@@ -1,0 +1,98 @@
+name: CI
+
+# The `test` job name is referenced by the `protect-main` ruleset's
+# required_status_checks rule. Renaming the job blocks all merges.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # --- Security invariants -------------------------------------------
+      # This repository is PUBLIC. .gitignore is the only thing standing
+      # between a Wells Fargo statement and the open internet, so assert it
+      # rather than trust it. Regression here is the single most damaging
+      # bug this repo can ship.
+      - name: gitignore protects positions, statements and secrets
+        run: |
+          set -euo pipefail
+          fail=0
+          must_ignore() {
+            if git check-ignore -q "$1"; then
+              echo "  ok      $1"
+            else
+              echo "  LEAK    $1  <-- would be committed to a PUBLIC repo"
+              fail=1
+            fi
+          }
+          must_track() {
+            if git check-ignore -q "$1"; then
+              echo "  BLOCKED $1  <-- over-broad ignore rule"
+              fail=1
+            else
+              echo "  ok      $1"
+            fi
+          }
+          echo "Must be ignored:"
+          for f in \
+            imports/positions.csv imports/statement.pdf imports/positions.xlsx \
+            imports/export.ofx imports/wf.qfx \
+            config/book.yaml config/desk.yaml \
+            .env .envrc prod.env secrets.json api.key server.pem desk.db
+          do must_ignore "$f"; done
+          echo "Must remain tracked:"
+          for f in \
+            imports/.gitkeep config/book.example.yaml config/desk.example.yaml \
+            .env.example playbooks/edge_breakout_v2.yaml \
+            tests/fixtures/positions_1.csv README.md
+          do must_track "$f"; done
+          exit $fail
+
+      - name: no secret-shaped file is tracked
+        run: |
+          set -euo pipefail
+          hits=$(git ls-files \
+                  | grep -iE '(^|/)\.env$|\.envrc$|(^|/)secrets?\.|\.pem$|\.key$|^imports/' \
+                  | grep -v '^imports/\.gitkeep$' || true)
+          if [ -n "$hits" ]; then
+            echo "Tracked files that should never be committed:"; echo "$hits"; exit 1
+          fi
+          echo "  ok  nothing secret-shaped is tracked"
+
+      # --- ADR integrity --------------------------------------------------
+      # score.py is the source of truth for every weighted score in ADR 0001.
+      # Its self-check also cross-checks the markdown, which is what caught
+      # three rounds of prose drifting away from the computed values.
+      - name: ADR scoring self-check
+        run: |
+          if [ -f internal-docs/adr/score.py ]; then
+            python3 internal-docs/adr/score.py --check
+          else
+            echo "score.py not on this branch yet (lands with ADR 0001). Skipping."
+          fi
+
+      # --- Application test suite ----------------------------------------
+      # T1 adds pyproject.toml, the desk/ package and pytest/ruff/mypy behind
+      # `make test`. Until then this step is a no-op that reports honestly
+      # rather than silently passing an empty suite.
+      - name: application suite
+        run: |
+          if [ -f Makefile ] && grep -qE '^test:' Makefile; then
+            make test
+          else
+            echo "No Makefile test target yet (T1 adds it). Skipping."
+          fi

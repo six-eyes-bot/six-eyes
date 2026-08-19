@@ -2,7 +2,7 @@
 
 **This is an engineering record, not legal advice.** It states what this project does and why. Every entry is dated and, where it concerns third-party code, pinned to the SHA or version examined. Nothing here is a legal opinion about anyone else's work.
 
-*Last reviewed: 2026-08-18. Enforcement is automated — see below.*
+*Last reviewed: 2026-08-19. Enforcement is automated — see below.*
 
 ---
 
@@ -40,8 +40,8 @@ A hand-maintained table of 142 packages would be stale within a week. The enforc
 
 ## This repository's own licence
 
-**Open — needs a decision.** This repo is public and is about to contain Apache-2.0 third-party source under `engine/`, and it currently has no root `LICENSE` file at all.
+**Apache-2.0**, chosen by the project owner 2026-08-19. `LICENSE` at the repo root, copyright `2026 six-eyes-bot`.
 
-Reasonable options: **Apache-2.0** (matches the vendored engine, includes a patent grant), **MIT** (simpler, permissive), or an explicit **all-rights-reserved** notice (legitimate for a personal project — "public" and "open source" are not the same thing).
+Rationale: it matches the TradingAgents source vendored under `engine/`, so a single licence covers the whole tree rather than two sitting side by side, and it carries an explicit patent grant that MIT does not.
 
-Tracked as T1 deliverable **D11**. Not chosen here.
+This does not change the status of vendored third-party code — each vendored directory keeps its own upstream `LICENSE`, and Apache-2.0 §4(b) still obliges us to state our changes in `PROVENANCE.md`.

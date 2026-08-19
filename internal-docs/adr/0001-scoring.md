@@ -903,3 +903,140 @@ get_industrial_production_index · get_mortgage_rate_30_year · get_retail_sales
 ```
 
 Recommended-set item 8 is "FRED via raw HTTP, no library." `financetoolkit` — already adopted for other reasons — ships a typed FRED client, so that hand-rolled integration may be free. `get_real_yield_curve` is also directly relevant to the UST 10Y requirement that the `^TNX` defect (§3.3) forced onto FRED in the first place. **Not measured:** whether `fetch_single_series` accepts arbitrary series IDs such as `DGS10`.
+
+---
+
+## 9. Round 4 — audit remediation (2026-08-18)
+
+Two adversarial lenses were run against this audit itself. **It failed.** This section records every remediation. Where a number here differs from §1–§8, **this section supersedes**.
+
+### 9.1 Scoring is now computed, not hand-written
+
+Four of twenty-one weighted scores in §4/§7.6 were arithmetically wrong (TradingAgents 74→80, virattt 71→77, Option B 86.7→84.5, QuantMind 58→64) — three identical −6.0 errors from a stale weighting never recomputed.
+
+**Fix:** [`score.py`](score.py) is now the source of truth. `python3 internal-docs/adr/score.py` regenerates every score from its sub-scores. It also encodes the two rubrics that §4 stated but did not follow:
+
+```
+econ = 10 - 10 * net_new_packages / 80
+cost = 10 - 1.5 * (usd_per_month / 50)
+```
+
+Applying the econ rubric mechanically moves several scores that were previously judged rather than computed — Kronos 61→70.8, OpenBB 65→62.0, QuantMind 58→62.1, nautilus_trader 84→93.4. **No recommendation changes as a result**, because each of those was decided on licence or fit, not on score — which is itself the finding in §9.6.
+
+### 9.2 The fit gate is now explicit — the formula did not make Decision 1
+
+The audit found the 40/30/30 formula was being used to ratify conclusions reached on unstated grounds. Confirmed: `nautilus_trader` now scores **93.4**, the highest of any candidate in this audit, and is rejected. `virattt` beats TradingAgents on every measured reliability input (11 vs 31 days idle, 11 vs 8 releases/12mo, 39 vs 19 contributors, 0h vs no response).
+
+**Fix:** a **fit gate** is applied *before* scoring and stated plainly:
+
+> A committee-engine candidate must reproduce DESK_DESIGN §1 W2's 14-node graph — bull/bear researcher, research manager, trader, risk manager, fund manager.
+
+`virattt` is architecturally a persona ensemble (Buffett, Burry, Wood…), not that graph, so it is gated out at 77.0 rather than beaten on points. `nautilus_trader` is a live-execution platform requiring a venue adapter, structurally opposed to D5 (paper only). **Decision 1 and the nautilus rejection are fit decisions. The formula did not make them, and §4 implied it did.**
+
+### 9.3 FMP estimates tier — RESOLVED, and the recommendation changes to $19/mo
+
+§6 listed this as "not measured" while §3.2 printed `💲$49` for the Estimates row as fact. Estimates coverage was the load-bearing justification for the purchase, so this was the audit's most consequential gap.
+
+**Resolved by DOM extraction against the rendered comparison table**, bucketing each row's marks against the measured column positions (`Basic@298 · Starter@448 · Premium@595 · Ultimate@758`):
+
+| Row | Basic (free) | **Starter $19** | Premium $49 | Ultimate $99 |
+|---|---|---|---|---|
+| Financial Estimates | `sample-flag` | **`us-flag`** | `us-uk-can` | `globe_flag` |
+| Price Target Consensus | `sample-flag` | **`us-flag`** | `us-uk-can` | `globe_flag` |
+| Ratings Snapshot | `sample-flag` | **`us-flag`** | `us-uk-can` | `globe_flag` |
+| Historical Stock Grades | `sample-flag` | **`us-flag`** | `us-uk-can` | `globe_flag` |
+| Average Directional Index | `sample-flag` | **`us-flag`** | `us-uk-can` | `globe_flag` |
+| Income Statement | `sample-flag` | **`us-flag`** | `us-uk-can` | `globe_flag` |
+
+The marks are **coverage flags, not availability ticks** — the legend is inferred from the filenames and corroborated exactly by the plan-card text ("US Coverage" at Starter, "UK and Canada Coverage" at Premium, "Global Coverage" at Ultimate).
+
+**Analyst estimates and price-target consensus are available at Starter, $19/month, with US coverage.** The Desk is US-only equities, so Premium's UK/Canada adds nothing, and its 30-year history is redundant against yfinance's measured free 27 years (6,934 daily bars, §3.3).
+
+Rescored:
+
+| Option | rel | econ | cost | **Score** |
+|---|---:|---:|---:|---:|
+| A — $0 | 5 | 10 | 10.0 | 80.0 |
+| **B19 — A + FMP Starter $19** | 7 | 9 | 9.43 | **83.3** ✅ |
+| B49 — A + FMP Premium $49 | 7 | 9 | 8.53 | 80.6 |
+| C — A + FMP Ultimate $99 | 7 | 9 | 7.03 | 76.1 |
+| E — A + EODHD $99.99 | 6 | 8 | 7.0 | 69.0 |
+| D — Finnhub $3,500 | 9 | 10 | 0.0 | 66.0 |
+
+**Recommendation changes from $49/mo to $19/mo.** FMP reliability is scored 7, not 8 — the tier question is resolved but the service still has no live uptime measurement here.
+
+*Still not measured:* FMP's `Institutional Ownership Filings` and `Treasury Rates` rows did not resolve under the same extraction (both returned empty across all four columns). 13F remains attributed to Ultimate from the plan card only.
+
+### 9.4 `financetoolkit` EXECUTED — and it carries a third naming trap
+
+§8.5 scored it rel 9 on metadata and `inspect.getmembers` presence checks without ever calling a function. The audit called this out, given that this project's two best findings exist precisely because metadata-healthy things returned wrong data when invoked. Now executed on the same seeded 500-point series as §7.5:
+
+| Function | financetoolkit | empyrical | Verdict |
+|---|---|---|---|
+| `get_max_drawdown` | **-0.1395** | -0.1395 | ✅ exact agreement |
+| `get_beta` | **-0.0099** | -0.0099 | ✅ exact agreement |
+| `get_max_drawdown_duration` | **195.0** | *(absent)* | ✅ works — the reason it was chosen |
+| `get_max_drawdown_recovery_time` | **66.0** | *(absent)* | ✅ works |
+| `get_relative_strength_index` | runs, bounded | *(absent)* | ✅ works |
+| **`get_sharpe_ratio`** | **0.0384** | **0.6098** | ⚠️ **15.88× apart** |
+
+```
+0.0384 × √252 = 0.6096   ≈ empyrical's 0.6098
+```
+
+**`financetoolkit.get_sharpe_ratio` returns a PER-PERIOD (daily) Sharpe; `empyrical`/`quantstats` annualise by default.** Not a bug — a convention difference under an identical name, and **the third instance of this exact trap** (`^TNX` §3.3, `win_rate` §7.5/§8.6). Reported as `0.04` instead of `0.61`, T8's autonomy gate reads catastrophically wrong.
+
+Score adjusted **9 → 8** (executed, but ships a documented footgun): **86.0**, still ahead of `quantstats` at 83.0. Recommendation unchanged.
+
+**T8 must annualise explicitly and assert the convention in a test.**
+
+### 9.5 Coverage re-run across a stratified basket — the small-cap concern is rebutted
+
+§3.3 tested `NVDA` only, one day. The audit correctly flagged that T11's screener returns small-caps where these fields routinely go missing. Re-run across nine tickers:
+
+| Ticker | Cap | 12 required `.info` fields | Option expiries | IV | Daily bars |
+|---|---|---|---|---:|---:|
+| NVDA | mega | **12/12** | 21 | ✅ | 6,936 |
+| AAPL | mega | **12/12** | 22 | ✅ | 11,513 |
+| MU | mid | **12/12** | 22 | ✅ | 10,636 |
+| PLUG | small | **12/12** | 11 | ✅ | 6,741 |
+| RIOT | small | **12/12** | 13 | ✅ | 2,612 |
+| BBAI | small | **12/12** | 11 | ✅ | 1,351 |
+| SOUN | small | **12/12** | 10 | ✅ | 1,081 |
+| CLSK | small | **12/12** | 14 | ✅ | 2,451 |
+| BLNK | micro | **12/12** | 6 | ✅ | 4,190 |
+| TIVO | *delisted* | **0/12** | 0 | ❌ | 0 |
+| GIV | *delisted* | **0/12** | 0 | ❌ | 0 |
+
+**9 of 9 live tickers, mega through micro, return all twelve fields plus an option chain with IV.** The concern is rebutted by measurement.
+
+**But it surfaced a different failure, and a worse one.** `TIVO` and `GIV` — two of the five positions in DESK_DESIGN's own example book — are delisted, and yfinance returns **all-MISS across every field with no exception raised**, only a stderr note. Same silent-failure class as `^TNX`. A health check on a delisted holding would silently report nothing rather than refusing.
+
+**Consequence for T2:** the mandated guard cannot be a row-count floor alone — options IV and short interest are `.info` scalars, so the failure mode is a **missing key**, not a short series. `desk/data.py` needs a per-field schema assertion plus an explicit ticker-liveness check.
+
+### 9.6 Sub-scores that were asserted rather than measured
+
+§2.1 had no probe rows for `virattt` or `DanisHack`, yet both carried economy sub-scores. Measured now:
+
+```
+pip install .   (clean py3.11 venv, DanisHack repo root)
+→ 73 packages, 249 MB, NET-NEW vs the 142-package recommended set = 8
+  ai-hedge-fund, alpaca-py, groq, langchain, langchain-groq, msgpack,
+  polygon-api-client, sseclient-py
+```
+
+Rubric econ = `10 − 10×8/80` = **9.0**, not the 7 asserted. **DanisHack-as-DEPEND is therefore 65.0, not 59.0.** The DEPEND→VENDOR swing is **65 → 96**, not 59 → 96. The point stands; the number was wrong.
+
+*`virattt` footprint: probe did not complete — **not measured**. Its econ 5 remains unsupported, and it is gated out on fit regardless (§9.2).*
+
+### 9.7 The `backtrader` retraction, propagated
+
+§7.8 is titled *"`backtrader` is a licence problem, not housekeeping"* and concluded it was *"the same class of exposure as the OpenBB AGPL finding."* **That conclusion is withdrawn.** Installing a copyleft package into a local virtualenv is not conveying it, and nothing imports `backtrader`. The correct reason to remove it is **dead weight** — 22.9k★, 729 days idle, zero imports.
+
+The same reasoning was withheld from OpenBB, where it would have been inconvenient. OpenBB's exclusion survives on: **86 net-new packages** (econ 0.0 by the rubric), +119 MB, zero unique metrics, and — the argument that actually holds — that `desk/data.py` would *import* it and this repo is *public*, so we would publish source forming a combined work with an AGPL-3.0 library.
+
+The unbounded criterion *"No AGPL package in the environment"* is **withdrawn** and replaced by an enforceable T1 invariant: **no distribution in the resolved environment carries a GPL/AGPL classifier, asserted by a test.**
+
+### 9.8 Package count reconciled
+
+The document previously stated 134, 142 and 220 in different sections. **The recommended set is 142 packages** (verified: union of the TradingAgents git tree, the core ops set, `scipy`, and `financetoolkit`). OpenBB's marginal cost is **+86 packages on that 142 base (+61%)**, not "+64% on a 134-package base."

@@ -22,7 +22,7 @@ Weights applied: **reliability 40 · dependency economy 30 · subscription cost 
 - **DEPEND** — installed by a package manager, upgraded over time, someone else's release cadence becomes our problem. Reliability metrics dominate: idle days, bus factor, release cadence, issue responsiveness.
 - **VENDOR** — copied into our tree, becomes our code, upstream stops mattering at the moment of the copy. Popularity is nearly irrelevant. What matters is licence, test coverage, size, and how many packages that specific module drags in.
 
-Classifying each candidate into the right mode turned out to be the highest-leverage judgement in this audit. The clearest case: `DanisHack/ai-hedge-fund` scores **59/100 as a DEPEND and 96/100 as a VENDOR**. Same repo, same measurements, same day. It is a bad dependency (185 days idle, bus factor 1, zero releases) and an excellent donor (MIT, 342 passing tests, 1,853 relevant LOC, **zero net new packages**).
+Classifying each candidate into the right mode turned out to be the highest-leverage judgement in this audit. The clearest case: `DanisHack/ai-hedge-fund` scores **59/100 as a DEPEND and 96/100 as a VENDOR**. Same repo, same measurements, same day. It is a bad dependency (185 days idle, bus factor 1, zero releases) and an excellent donor (MIT, **160** passing tests covering the modules taken, 1,853 relevant LOC, **zero net new packages**).
 
 Star counts were used as one weak input and never as a tiebreak, per the brief. They earned their reputation here: the two most-starred candidates in the set — `TauricResearch/TradingAgents` (98.8k★) and `shiyu-coder/Kronos` (37.5k★) — are respectively the base we keep and the heaviest thing we refuse to install by default.
 
@@ -32,10 +32,12 @@ Star counts were used as one weak input and never as a tiebreak, per the brief. 
 
 Recommended set — **142 unique Python packages** total (134 core + `scipy` from the valuation vendoring + 7 from `financetoolkit`). Sum-of-parts would be 203 before those; shared transitive deps save 69.
 
+> **Scores in this document were recomputed 2026-08-18 after an adversarial audit found four arithmetic errors.** [`score.py`](score.py) is now the source of truth; [`0001-scoring.md` §9](0001-scoring.md) records every remediation and **supersedes** earlier numbers where they differ.
+
 | # | Item | Mode | Why, in one line |
 |---|---|---|---|
 | 1 | `TauricResearch/TradingAgents` @ pinned SHA (v0.3.1) | **VENDOR** (pinned fork) | Graph matches slide 3 1:1; all three claimed upstream features verified; **must install from git — the PyPI name is someone else's fork** |
-| 2 | `DanisHack/ai-hedge-fund` — 11 modules, 1,853 LOC | **VENDOR** | 342 tests verified passing on a clean checkout; MIT; adds **0 net new packages**. Survived active alternatives sweeps — see Decisions 2b and 2c |
+| 2 | `DanisHack/ai-hedge-fund` — 11 modules, 1,853 LOC | **VENDOR** | **160** tests covering the taken modules verified passing on a clean checkout (342 repo-wide); MIT; adds **0 net new packages**. Survived active alternatives sweeps — see Decisions 2b and 2c |
 | 2b | `financetoolkit` | **DEPEND** | Return-series stats, technicals, ratios, CAPM, implied vol. Supplies drawdown **duration** *and* **recovery time**, which T8 requires and DanisHack does not compute. **+7 packages — cheaper than `quantstats` and covers strictly more.** Superseded `quantstats` in Round 3 |
 | 3 | `langgraph` | **DEPEND** | Already transitive via (1) — 0 net new packages |
 | 4 | `litellm` | **DEPEND** | Gateway for all 14 agents; collapses most of T14 to config |
@@ -45,14 +47,14 @@ Recommended set — **142 unique Python packages** total (134 core + `scipy` fro
 | 8 | FRED (`fredgraph.csv` / API) | **DEPEND** (HTTP, no library) | Free, no key needed; the correct source for UST 10Y |
 | 9 | SEC EDGAR (`data.sec.gov`) | **DEPEND** (HTTP, no library) | Free, 10 req/s, declared UA; XBRL fundamentals + 13F |
 | 10 | `dafahentra/dcf-valuation-tool` — `dcf_engine.py`, 207 LOC | **VENDOR** | Canonical MIT; imports only numpy + scipy; **replaces the T9 pick, which is licence-blocked** |
-| 11 | **FMP Premium — $49/mo** | subscription | Not for coverage. For a contract, 30y history, and 750 rpm of headroom |
+| 11 | **FMP Starter — $19/mo** | subscription | Estimates VERIFIED at Starter (scoring §9.3). Premium's UK/CA and 30y history are redundant — yfinance gives 27y free. Scores 83.3 vs $0's 80.0 and $49's 80.6 |
 | 12 | `NousResearch/hermes-agent` @ pinned SHA | **VENDOR** (pinned fork) | Per D2, unchanged — but see Consequences; its issue ratio is the worst measured |
 
 **Dropped:** OpenBB and `openbb-mcp-server` (Phase 4 below) · QuantMind (fit gate below) · `virattt/ai-hedge-fund` · `bit-r/TradingAgents-AI-hedge-fund` · `td-02` as a code source · Alpha Vantage · Finnhub · Tiingo · EODHD · Polygon/Massive · Finviz Elite.
 
 **Gated, not adopted:** Kronos — stays behind T8 exactly as T16 specifies, now with the number attached.
 
-**Total monthly subscription cost: $49.**
+**Total monthly subscription cost: $19.**
 
 ---
 
@@ -338,9 +340,20 @@ Nothing changes about T16: gated behind T8, adopted only if it beats the determi
 
 **1. TradingAgents: economy lost to reliability, deliberately.** At 107 packages it is the single largest DEPEND in the set, and two of those packages — `backtrader` and `redis` — are **declared in `pyproject.toml` and never imported anywhere in the codebase**. A leaner engine would score better on criterion 2. Reliability won: the graph matches slide 3 one-to-one, all three claimed features verified in the checkout, Apache-2.0, 8 releases in 12 months. Rebuilding that graph to save packages would cost weeks to save megabytes.
 
-**Correction to this ADR's first draft, from the Round 2 sweep.** I called removing those two declarations "zero functional cost" housekeeping. It is a **licence requirement**. `backtrader` 1.9.78.123 is **GPLv3+** (PyPI classifier: *GNU General Public License v3 or later*), and it is **installed in the tree today** by `pip install git+TauricResearch/TradingAgents`, purely from a `pyproject.toml` line no code imports. GPL-3.0 is copyleft on distribution of a combined work, and this repo is public. That is the same class of exposure as the OpenBB AGPL finding — arriving through a dependency nobody chose and nobody uses. **Mitigation is unchanged and still free: drop both declarations in our fork. The reason it matters is not.**
+**Correction to this ADR's earlier drafts — and a correction to that correction.**
 
-**2. DanisHack: reliability lost to economy — but only because the mode changed.** As a DEPEND it is close to indefensible: 185 days idle, bus factor 1, no releases. Under the T0 rule, VENDOR mode makes upstream's cadence irrelevant, and what remains is a clean MIT licence, 342 verified-passing tests, and **0 net new packages** for 1,853 LOC. This is the trade the vendor/depend distinction exists to make. **The risk we accept: the day we copy those modules, we own them, and nobody upstream will fix a bug in them.** With 342 tests coming along, that is an acceptable trade — and it is a genuine trade, not a free lunch.
+Draft 1 called removing `backtrader`/`redis` "zero functional cost" housekeeping. Draft 2 escalated it to "a licence requirement … the same class of exposure as the OpenBB AGPL finding." **Both were wrong, and the second was wrong in a way that flattered this ADR's own headline finding.** The adversarial audit caught it; the corrected position:
+
+- **Installing a copyleft package into a local virtualenv is not conveying it.** `backtrader` 1.9.78.123 is GPLv3+ and does land in the tree from an upstream `pyproject.toml` line — but nothing imports it, and publishing *our* source does not distribute *it*. The honest case for removal is **dead weight**: a 22.9k★ package, 729 days idle, zero imports. That is reason enough. It is not a copyleft exposure.
+- **The same reasoning must apply to OpenBB, and I withheld it.** At T1 nothing imports OpenBB either, so the venv argument would equally deflate the AGPL finding. Applying an argument only where it favours my own recommendation is exactly the failure this audit is supposed to catch.
+
+**OpenBB's exclusion survives, on the grounds that actually hold:** +86 packages (+64% on a 134-package base), +119 MB, **zero required metrics served that the direct providers don't**, and a tightened Python ceiling. Those are measured and decisive on their own.
+
+The licence point survives too, but only in its correct and *stronger* form: the objection is not a package sitting in a venv — it is that `desk/data.py` would **import** OpenBB, and this repo is **public**, so we would be publishing source that forms a combined work with an AGPL-3.0 library. That is a real conveying argument. The venv framing was the weak one, and it was the one I used.
+
+Consequently the Consequences/Action-Item criterion *"No AGPL package in the environment"* is **withdrawn** — it is unbounded across 142 packages and unverifiable by the `grep -Ei 'openbb|backtrader'` check offered alongside it. Replaced by the enforceable invariant in T1: **no distribution in the resolved environment carries a GPL/AGPL classifier, asserted by a test.**
+
+**2. DanisHack: reliability lost to economy — but only because the mode changed.** As a DEPEND it is close to indefensible: 185 days idle, bus factor 1, no releases. Under the T0 rule, VENDOR mode makes upstream's cadence irrelevant, and what remains is a clean MIT licence, **160** verified-passing tests over the modules taken, and **0 net new packages** for 1,853 LOC. This is the trade the vendor/depend distinction exists to make. **The risk we accept: the day we copy those modules, we own them, and nobody upstream will fix a bug in them.** With 160 relevant tests coming along, that is an acceptable trade — and it is a genuine trade, not a free lunch.
 
 **3. Data providers: economy and cost both lost to reliability, for $49/month.** Option A covers every required metric for **$0**. We are recommending $49 anyway. Strictly on criteria 2 and 3, that is the wrong call. Criterion 1 outranks both, and two measured live failures — `^TNX` returning 17 bars without an error, finvizfinance's fundamentals scraper throwing on every ticker — are what $49 is insuring against. **The uncomfortable part, stated plainly: $49 does not remove the fragile dependency. It only gives us somewhere to fail over to.** yfinance stays on the critical path for options and short interest at every price point below $3,500/month.
 
@@ -358,7 +371,7 @@ Nothing changes about T16: gated behind T8, adopted only if it beats the determi
 - 134 packages instead of 220. Faster CI, smaller images, fewer CVE surfaces to track.
 - No AGPL anywhere in the tree — T1's licence audit becomes a short document with a clean result.
 - T9 drops further than TICKETS.md hoped: `dcf_engine.py` is 207 LOC with no data coupling, so "repoint at `desk/data.py`" is not a code change at all, just a caller that passes a dict.
-- Vendoring DanisHack brings 342 passing tests into a repo that currently has none.
+- Vendoring DanisHack brings 160 passing tests (over the modules taken) into a repo that currently has none.
 
 **Harder**
 
@@ -421,7 +434,8 @@ Diff-style against `internal-docs/TICKETS.md`. **That file is not modified by th
 
 **T4 — Exit-rule engine** · **T8 — Eval harness** · **T12 — Ticket sizing**
 ```diff
-+ DanisHack vendoring CONFIRMED by measurement: 342 tests collected, 342 passed
++ DanisHack vendoring CONFIRMED by measurement: 160 of the repo's 342 tests
++   cover the 11 taken modules; all 160 pass in isolation in 3.55s (342 passed
 +   on a clean py3.11 checkout; canonical MIT; 1,853 LOC across the target
 +   modules; 0 net new packages (numpy/pandas/pydantic/rich/langchain_core
 +   are all already in the tree).

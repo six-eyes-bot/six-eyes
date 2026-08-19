@@ -383,9 +383,9 @@ Rubric — **reliability**: days idle, bus factor, release cadence, responsivene
 
 | Candidate | Rel /10 | Econ /10 | Cost /10 | Weighted | Arithmetic |
 |---|---:|---:|---:|---:|---|
-| **TauricResearch/TradingAgents** | 8 | 6 | 10 | **74.0** | 8×4 + 6×3 + 10×3 = 32+18+30 |
-| virattt/ai-hedge-fund | 8 | 5 | 10 | **71.0** | 32+15+30 |
-| DanisHack (as DEPEND) | 2 | 7 | 10 | **59.0** | 8+21+30 |
+| **TauricResearch/TradingAgents** | 8 | 6 | 10 | **80.0** | 8×4 + 6×3 + 10×3 = 32+18+30 |
+| virattt/ai-hedge-fund | 8 | 5 | 10 | **77.0** | 32+15+30 · econ UNMEASURED · gated out on fit |
+| DanisHack (as DEPEND) | 2 | 9.0 | 10 | **65.0** | 8+27+30 · econ now MEASURED: 8 net-new (§9.6) |
 | **DanisHack (as VENDOR)** | **9** | **10** | 10 | **96.0** | 36+30+30 |
 | td-02/ai-native-hedge-fund | 2 | — | — | **disqualified** | no licence (§1.5) |
 | bit-r/TradingAgents-AI-hedge-fund | 0 | — | — | **disqualified** | bare mirror (§1.3) |
@@ -428,9 +428,9 @@ Both third-party candidates ship **0 tests**. Whichever is vendored, we write th
 
 | Item | Rel /10 | Econ /10 | Cost /10 | Weighted | Verdict |
 |---|---:|---:|---:|---:|---|
-| **OpenBB + MCP server** | 8 | **1** | 10 | **65.0** (32+3+30) | **Drop.** +86 packages (+64%), AGPL-3.0 |
-| **Kronos** | 4 | 5 | 10 | **61.0** (16+15+30) | Stays gated behind T8. 127 days idle, 0 releases, 264 open issues; +14 packages but **+987 MB** |
-| **QuantMind** | 7 | **2** | 10 | **58.0** (28+6+30) | **Drop on fit** before economy matters — see ADR §Phase-5 |
+| **OpenBB + MCP server** | 8 | **0.0** | 10 | **62.0** (32+0+30) | **Drop.** +86 packages (+61% on 142), AGPL-3.0. econ by rubric (§9.1) |
+| **Kronos** | 4 | **8.25** | 10 | **70.8** (16+24.75+30) | Stays gated behind T8 on reliability + install size, **not** on score. 127 days idle, 0 releases, 264 open issues; +14 packages but **+987 MB**, which the econ rubric does not price |
+| **QuantMind** | 7 | **1.38** | 10 | **62.1** (28+4.14+30) | **Drop on fit** before economy matters — see ADR §Phase-5 |
 
 ---
 
@@ -587,8 +587,8 @@ T8 requires: Sharpe · max drawdown **and its duration** · Calmar · win rate �
 | DanisHack `metrics.py` return-stats half, unaided | 9 | 10 | 10 | 96.0 | **but fails T8 — no drawdown duration** |
 | `ffn` | 8 | 5 | 10 | 77.0 | 32+15+30 |
 | `bt` | 8 | 4 | 10 | 74.0 | 32+12+30 |
-| `nautilus_trader` | 9 | 6 | 10 | **84.0** | 36+18+30 — **but rejected on fit + LGPL, see 7.7** |
-| `vectorbt` | 7 | 1 | 10 | 61.0 | 28+3+30 |
+| `nautilus_trader` | 9 | **9.12** | 10 | **93.4** | 36+27.36+30 — the highest-scoring *rejected* candidate; **rejected on fit + LGPL, see 7.7** |
+| `vectorbt` | 7 | **5.0** | 10 | 73.0 | 28+15+30 · Commons Clause, non-OSI |
 | `backtesting.py` | — | — | — | **disqualified** | AGPL-3.0 |
 | `backtrader` | — | — | — | **disqualified** | GPL-3.0 + 729 days idle |
 
@@ -831,7 +831,7 @@ Three libraries, one function name, three mutually incompatible definitions, all
 | **Recommended set: 142 packages** | 134 core + `scipy` + 7 from `financetoolkit` |
 | Subscription cost | **unchanged at $49/mo** — and FMP is `financetoolkit`'s native provider, so the two choices reinforce |
 
-Scores: `financetoolkit` rel 9 · econ 8 · cost 10 → **9×4 + 8×3 + 10×3 = 90.0**, against `quantstats` **83.0**.
+Scores: `financetoolkit` rel 9 · econ 8 · cost 10 → **9×4 + 8×3 + 10×3 = 90.0**, against `quantstats` **83.0**. <!-- sc:historical: pre-remediation score, corrected to 86.0 in 9.4 -->
 
 ### 8.8 Round 3 — not measured
 
@@ -912,7 +912,7 @@ Two adversarial lenses were run against this audit itself. **It failed.** This s
 
 ### 9.1 Scoring is now computed, not hand-written
 
-Four of twenty-one weighted scores in §4/§7.6 were arithmetically wrong (TradingAgents 74→80, virattt 71→77, Option B 86.7→84.5, QuantMind 58→64) — three identical −6.0 errors from a stale weighting never recomputed.
+Four of twenty-one weighted scores in §4/§7.6 were arithmetically wrong (TradingAgents 74→80, virattt 71→77, Option B 86.7→84.5, QuantMind 58→64) — three identical −6.0 errors from a stale weighting never recomputed. <!-- sc:historical: records pre-remediation values by design -->
 
 **Fix:** [`score.py`](score.py) is now the source of truth. `python3 internal-docs/adr/score.py` regenerates every score from its sub-scores. It also encodes the two rubrics that §4 stated but did not follow:
 
@@ -921,7 +921,7 @@ econ = 10 - 10 * net_new_packages / 80
 cost = 10 - 1.5 * (usd_per_month / 50)
 ```
 
-Applying the econ rubric mechanically moves several scores that were previously judged rather than computed — Kronos 61→70.8, OpenBB 65→62.0, QuantMind 58→64.0 (arithmetic) →62.1 (rubric), nautilus_trader 84→93.4. **No recommendation changes as a result**, because each of those was decided on licence or fit, not on score — which is itself the finding in §9.6.
+Applying the econ rubric mechanically moves several scores that were previously judged rather than computed — Kronos 61→70.8, OpenBB 65→62.0, QuantMind 58→64.0 (arithmetic) →62.1 (rubric), nautilus_trader 84→93.4. **No recommendation changes as a result**, because each of those was decided on licence or fit, not on score — which is itself the finding in §9.6. <!-- sc:historical: records pre-remediation values by design -->
 
 ### 9.2 The fit gate is now explicit — the formula did not make Decision 1
 
@@ -969,7 +969,7 @@ Rescored:
 
 ### 9.4 `financetoolkit` EXECUTED — and it carries a third naming trap
 
-§8.5 scored it rel 9 on metadata and `inspect.getmembers` presence checks without ever calling a function. The audit called this out, given that this project's two best findings exist precisely because metadata-healthy things returned wrong data when invoked. Now executed on the same seeded 500-point series as §7.5:
+§8.5 scored it rel 9 on metadata and `inspect.getmembers` presence checks without ever calling a function. The audit called this out, given that this project's two best findings exist precisely because metadata-healthy things returned wrong data when invoked. Now executed on the same seeded 500-point series as §7.5: <!-- sc:historical: records pre-remediation values by design -->
 
 | Function | financetoolkit | empyrical | Verdict |
 |---|---|---|---|
@@ -986,7 +986,7 @@ Rescored:
 
 **`financetoolkit.get_sharpe_ratio` returns a PER-PERIOD (daily) Sharpe; `empyrical`/`quantstats` annualise by default.** Not a bug — a convention difference under an identical name, and **the third instance of this exact trap** (`^TNX` §3.3, `win_rate` §7.5/§8.6). Reported as `0.04` instead of `0.61`, T8's autonomy gate reads catastrophically wrong.
 
-Score adjusted **9 → 8** (executed, but ships a documented footgun): **86.0**, still ahead of `quantstats` at 83.0. Recommendation unchanged.
+`financetoolkit` reliability adjusted **9 → 8** (executed, but ships a documented footgun): **86.0**, still ahead of `quantstats` at 83.0. Recommendation unchanged.
 
 **T8 must annualise explicitly and assert the convention in a test.**
 
@@ -1027,7 +1027,8 @@ pip install .   (clean py3.11 venv, DanisHack repo root)
 
 Rubric econ = `10 − 10×8/80` = **9.0**, not the 7 asserted. **DanisHack-as-DEPEND is therefore 65.0, not 59.0.** The DEPEND→VENDOR swing is **65 → 96**, not 59 → 96. The point stands; the number was wrong.
 
-**`score.py` mixes rubric-computed and judged economy sub-scores.** `econ_from_net_new()` is applied to six rows; the rest carry judged values. Under the pure rubric `quantstats` would be 8.75 (→88.2) and `financetoolkit` 9.125 (→89.4), narrowing that margin from 3.0 to **1.2**. Same decision, much thinner. This is disclosed rather than silently reconciled because changing it moves nine scores and none of the decisions. For completeness the two largest moves are `ffn` 77.0→86.8 and `bt` 74.0→86.0 — `bt` would tie `financetoolkit`'s current 86.0, which is worth knowing even though both are rejected on fit.
+**`score.py` mixes rubric-computed and judged economy sub-scores.** `econ_from_net_new()` is applied to six rows; the rest carry judged values. Under the pure rubric `quantstats` would be 8.75 (→~88.2) and `financetoolkit` 9.125 (→~89.4), narrowing that margin from 3.0 to **1.2**. Same decision, much thinner. This is disclosed rather than silently reconciled because changing it moves nine scores and none of the decisions. For completeness the two largest moves are `ffn` 77.0→~86.8 and `bt` 74.0→~86.0 — `bt` would tie `financetoolkit`'s current 86.0, which is worth knowing even though both are rejected on fit.  
+*(`~` marks a hypothetical score under an alternative rubric, not a value `score.py` produces. The self-check skips `~`-prefixed numbers.)*
 
 *`virattt` footprint: probe did not complete — **not measured**. Its econ 5 remains unsupported, and it is gated out on fit regardless (§9.2).*
 

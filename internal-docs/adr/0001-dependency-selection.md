@@ -1,7 +1,9 @@
 # ADR 0001 — Dependency Selection for The Desk
 
-- **Status:** **Proposed** — a human signs off. Nothing here is implemented.
-- **Date:** 2026-08-18
+- **Status:** **Accepted** — 2026-08-18, by the project owner, conditional on passing adversarial audit.
+- **Date:** 2026-08-18 · **Accepted:** 2026-08-18
+- **Audit trail:** four adversarial passes (spec panel: staff-engineer · red-teamer · pre-mortem; then two on the ADR itself). Passes 1–3 returned REJECT. Pass 4 returned **ACCEPT-WITH-CAVEATS**; its one must-fix-before-merge item is corrected and its remaining caveats are on the record below.
+- **Not accepted by this decision:** T18's purchase (needs a card), and T19's yfinance terms-of-service call. Both remain open.
 - **Supersedes:** decisions D1–D3 in `internal-docs/DESK_DESIGN.md` §0, and the adopt lists in `internal-docs/TICKETS.md` T1/T2/T9/T11
 - **Measurements:** [`0001-scoring.md`](0001-scoring.md) — every number below is traceable there
 
@@ -55,6 +57,17 @@ Recommended set — **142 unique Python packages** total (134 core + `scipy` fro
 **Gated, not adopted:** Kronos — stays behind T8 exactly as T16 specifies, now with the number attached.
 
 **Total monthly subscription cost: $19.**
+
+### Accepted caveats — on the record
+
+Pass 4 returned ACCEPT-WITH-CAVEATS. Its must-fix (a wrong package-count gloss) is corrected. These remain, and are accepted knowingly rather than resolved:
+
+1. **`rev Q/Q` is single-sourced on yfinance** at the $19 tier — FMP Starter is *annual* fundamentals. A licensed fallback for that one metric costs $49, not $19 (§9.9).
+2. **The paid tier is a close call on an unmeasured input.** FMP has no live uptime test here; its reliability sub-score of 7 is an estimate. At 6, the free option wins (§9.10).
+3. **Economy sub-scores are mixed** — rubric-computed where a package count was measured, judged elsewhere. Disclosed in `score.py`'s docstring and §9.6; moves nine scores and no decisions.
+4. **`virattt`'s economy sub-score was never measured** (the probe did not complete). It is gated out on fit regardless, so the number decides nothing.
+5. **`score.py --check` reduces drift risk; it does not eliminate it.** Seven adversarial corruptions are caught, including every one that defeated earlier versions. Its escape hatches are deliberately small and greppable — 4 `PROSE_ALLOWLIST` entries (every one load-bearing; 8 dead ones pruned) and 5 `<!-- sc:historical -->` markers. Additions to either should be treated as review-worthy.
+6. **`financetoolkit.get_sharpe_ratio` is per-period, not annualised** — 15.88× from `empyrical` under an identical name. T8 must annualise explicitly and assert the convention in a test (§9.4).
 
 ---
 
@@ -149,7 +162,7 @@ Redone with star-bucketed `topic:` queries across the *functional* categories (s
 
 It ships `fmp_model.py` **and** `yfinance_model.py` — natively supporting both our chosen providers — plus its own MCP server. Co-installation with the full recommended set: `pip check` → *"No broken requirements found"*, `tradingagents 0.3.1` and `financetoolkit 2.2.0` both import under the resolved `pandas 3.0.5`.
 
-**`financetoolkit` replaces `quantstats`** (86.0 vs 83.0 — recomputed after execution lowered its reliability sub-score to 8; see scoring §9.4): cheaper, and it covers the T9 valuation CAPM plus enough of T6's indicator maths to cut hand-written code there.
+**`financetoolkit` replaces `quantstats`** (86.0 vs 83.0 — recomputed after execution lowered its reliability sub-score to 8; see scoring §9.4). **Disclosure:** those two economy sub-scores are *judged*, not rubric-computed. Under the rubric applied consistently the margin narrows to ~1.2 points. Same decision, thinner than it looks: cheaper, and it covers the T9 valuation CAPM plus enough of T6's indicator maths to cut hand-written code there.
 
 **DanisHack survives unchanged.** And the `win_rate` trap is now three-way — DanisHack counts profitable **round-trip trades**, quantstats counts **positive periods** (0.5140), and FinanceToolkit counts *"periods in which the asset's return exceeds the benchmark's"*. One name, three incompatible meanings, all plausible-looking. Nothing measured replaces round-trip trade accounting, so T8's expectancy gate stays on DanisHack.
 
@@ -358,7 +371,7 @@ Consequently the Consequences/Action-Item criterion *"No AGPL package in the env
 
 **3. Data providers: economy and cost both lost to reliability, for $19/month.** Option A covers every required metric for **$0** and scores 80.0; B19 scores 83.3. Strictly on criteria 2 and 3, paying anything is the wrong call. Criterion 1 outranks both, and two measured live failures — `^TNX` returning 17 bars without an error, finvizfinance's fundamentals scraper throwing on every ticker — are what $19 is insuring against. **The uncomfortable part, stated plainly: $19 does not remove the fragile dependency. It only gives us somewhere to fail over to.** yfinance stays on the critical path for options and short interest at every price point below $3,500/month. The margin over free is 3.3 points, so this is a close call that a modest re-weighting toward cost would flip — run `score.py` before re-litigating it.
 
-**4. OpenBB: the two criteria agreed, which is rare enough to note.** +86 packages is the worst economy score in the audit, and it serves no unique metric. Even re-weighted to reliability 60 / economy 10 / cost 30 it only reaches 78.0/100 — and the AGPL question is a licence matter that no weighting touches.
+**4. OpenBB: the two criteria agreed, which is rare enough to note.** +86 packages is the worst economy score in the audit, and it serves no unique metric. Even re-weighted to reliability 60 / economy 10 / cost 30 it only reaches ~78.0/100 (a hypothetical under those weights, not its score at 40/30/30) — and the AGPL question is a licence matter that no weighting touches.
 
 **5. The brief predicted this and was right.** "The most popular options in this space are also the heaviest." OpenBB: 72.0k★, +86 packages, dropped. Kronos: 37.5k★, 987 MB, gated. TradingAgents: 98.8k★, 107 packages, kept — because it is the one case where the weight buys something we cannot cheaply rebuild. And among adopted items the top score is shared by a **19-star repo with 0 forks** that nobody has touched in six months (DanisHack-as-VENDOR, 96.0) and `langgraph` (96.0).
 
@@ -369,7 +382,7 @@ Consequently the Consequences/Action-Item criterion *"No AGPL package in the env
 **Easier**
 
 - One subscription, one invoice, $19/month. No API-key sprawl across five vendors.
-- 142 packages instead of 211 (the same set with OpenBB re-added). Faster CI, smaller images, fewer CVE surfaces to track.
+- 142 packages, against 228 for the same set with OpenBB re-added. (Sum-of-parts before shared-dependency dedup is 211; the dedup is what makes the set 142.) Faster CI, smaller images, fewer CVE surfaces to track.
 - No GPL/AGPL-classified distribution in the resolved environment, asserted by a test rather than by a grep — T1's licence audit becomes short and checkable.
 - T9 drops further than TICKETS.md hoped: `dcf_engine.py` is 207 LOC with no data coupling, so "repoint at `desk/data.py`" is not a code change at all, just a caller that passes a dict.
 - Vendoring DanisHack brings 160 passing tests (over the modules taken) into a repo that currently has none.

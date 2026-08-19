@@ -52,7 +52,7 @@ ROWS = [
     ("-- Decision 3: valuation --", None, None, None, ""),
     ("dafahentra/dcf-valuation-tool", 7, 9, 10, "judged; canonical MIT, 207 LOC, numpy+scipy only"),
     ("EmanueleSturzo/DCF-Valuation-Model", 0, 10, 10, "judged; BLOCKED: licence omits modify/merge grant"),
-    ("Build valuation from scratch", 10, 10, 10, "judged; upper bound, costs the effort T9 avoids"),
+    ("Build-from-scratch valuation", 10, 10, 10, "judged; upper bound, costs the effort T9 avoids"),
 
     ("-- Ops layer --", None, None, None, ""),
     ("langgraph", 9, 10, 10, "judged; already transitive via TradingAgents, 0 net-new"),
@@ -64,7 +64,7 @@ ROWS = [
     ("B19 A + FMP Starter    $19/mo", 7, 9, cost_from_usd(19), "judged; estimates VERIFIED at Starter (us-flag). rel 7 is an ESTIMATE - no live uptime test; at rel 6 option A wins"),
     ("B49 A + FMP Premium    $49/mo", 7, 9, cost_from_usd(49), "judged; adds UK/CA + 30y history (both redundant) AND quarterly fundamentals (NOT redundant - see rev Q/Q, scoring 9.9)"),
     ("C   A + FMP Ultimate   $99/mo", 7, 9, cost_from_usd(99), "judged; adds 13F + 3000rpm"),
-    ("E   A + EODHD all-in  $100/mo", 6, 8, cost_from_usd(99.99), "judged; removes no dependency"),
+    ("E   A + EODHD all-in  $100/mo", 6, 8, cost_from_usd(99.99), "judged; adds options+screener+fundamentals from one vendor but removes no existing dependency"),
     ("D   Finnhub all-in   $3500/mo", 9, 10, cost_from_usd(3500), "judged; one vendor covers everything, absurd at this scale"),
 
     ("-- Decision: metrics library --", None, None, None, ""),
@@ -143,8 +143,12 @@ def self_check():
                         f"-> econ should be {want}, got {econ}"
                     )
         elif note.startswith("judged"):
-            if len(note) < len("judged; x"):
-                fail.append(f"{label}: marked 'judged' but gives no justification")
+            body = note.split(";", 1)[1].strip() if ";" in note else ""
+            if len(body.split()) < 4:
+                fail.append(
+                    f"{label}: marked 'judged' but the justification after ';' "
+                    f"is under four words ({body!r})"
+                )
         elif "UNMEASURED" not in note and not label.startswith("--"):
             fail.append(f"{label}: note must start 'rubric'/'judged' or carry UNMEASURED")
 
@@ -216,6 +220,9 @@ def self_check():
     return fail
 
 
+# ESCAPE HATCH -- treat additions as review-worthy. Entries here only apply on
+# lines that name NO candidate row; a line naming a row is always checked
+# against that row, allowlist or not.
 # Scores that legitimately appear in the prose without being produced by ROWS:
 # hypotheticals, sensitivity rows, and rubric-alternative figures that the text
 # explicitly labels as such. Every entry needs a reason.
@@ -223,18 +230,7 @@ PROSE_ALLOWLIST = {
     "79.3": "§9.10 sensitivity: FMP rel 6",
     "75.3": "§9.10 sensitivity: FMP rel 5",
     "87.3": "§9.10 sensitivity: FMP rel 8",
-    "88.2": "§9.6 rubric-alternative for quantstats",
-    "89.4": "§9.6 rubric-alternative for financetoolkit",
-    "86.8": "§9.6 rubric-alternative for ffn",
-    "78.0": "§Trade-off re-weighting example for OpenBB at 60/10/30",
-    "81.0": "Decision 1: virattt at hypothetical rel 9",
-    "100.0": "Build-from-scratch upper bound",
-    "84.5": "§9.1 records the pre-remediation Option B arithmetic being corrected",
-    "80.5": "§9.1 historical",
-    "90.0": "§8.7 pre-remediation financetoolkit score, cited in §9.1 as corrected",
     "86.7": "§9.1 records the pre-remediation Option B score being corrected",
-    "64.0": "§9.1 records QuantMind arithmetic fix before the rubric was applied",
-    "86.0": "produced by ROWS (bt, langfuse) - belt and braces",
 }
 
 
@@ -258,14 +254,54 @@ def check_markdown():
             problems.append(f"{md}: missing, cannot cross-check")
             continue
         for i, line in enumerate(p.read_text().splitlines(), 1):
-            if "score" not in line.lower() and "/100" not in line:
+            # Table rows carry scores with no "score" token on the line, and
+            # that is exactly where the previous version let drift through.
+            # Explicit, greppable opt-out for lines that deliberately record a
+            # superseded value (the remediation log cites old scores by design).
+            # Reviewable: `grep -c "sc:historical" *.md`.
+            if "sc:historical" in line:
                 continue
-            toks = re.findall(r"\b(\d{2,3}\.\d)\b", line)
+            is_table_row = line.lstrip().startswith("|")
+            if not is_table_row and "score" not in line.lower() and "/100" not in line:
+                continue
+            # Strip arithmetic breakdowns like "(32+27+25.5)" or "16+28.5+30"
+            # before extracting -- their terms are sub-score products, not scores.
+            scan = re.sub(r"\d+(?:\.\d+)?\s*[+x\u00d7]\s*\d+(?:\.\d+)?(?:\s*[+x\u00d7]\s*\d+(?:\.\d+)?)*", " ", line)
+            # A score here is 20.0-100.0; sub-scores are 0-10 and measurements
+            # (e.g. a 195-day drawdown) exceed 100.
+            # "~89.4" marks a hypothetical (an alternative-rubric figure), not
+            # a value this script produces. Drop those before extracting.
+            scan = re.sub(r"~\s*\d{2,3}\.\d", " ", scan)
+            toks = [t for t in re.findall(r"\b(\d{2,3}\.\d)\b", scan) if 20.0 <= float(t) <= 100.0]
             # also catch bare integers written as a score: "scores 84", "= 84/100"
             toks += [f"{int(t)}.0" for t in re.findall(r"scores?\s+(\d{2,3})\b", line)]
             # negative lookbehind so "8.75/100★" (issues per 100 stars) is not read as a score
             toks += [f"{int(t)}.0" for t in re.findall(r"(?<![\d.])(\d{2,3})\s*/\s*100\b", line)]
+            # Row-anchored: if the line names a candidate, any score on it must
+            # be THAT candidate's score. Catches collisions the set check misses
+            # (e.g. financetoolkit written as 86.0 when langfuse is also 86.0).
+            named = [
+                (lbl, f"{score(r, e, c):.1f}")
+                for lbl, r, e, c, _n in ROWS
+                if r is not None and _mentions(line, lbl)
+            ]
             for tok in toks:
+                if named:
+                    # Every score on a line that names candidates must belong to
+                    # one of them. Without this, "financetoolkit replaces
+                    # quantstats (86.0 vs 83.0)" passes while financetoolkit is
+                    # actually 90.0, because some other row happens to be 86.0.
+                    wants = {w for _l, w in named}
+                    # PROSE_ALLOWLIST deliberately does NOT apply here: on a
+                    # line that names candidates, the row is the authority. An
+                    # allowlist entry overriding it is how N2 slipped through.
+                    if tok not in wants:
+                        names = ", ".join(sorted(l for l, _w in named))
+                        problems.append(
+                            f"{md}:{i}: line names [{names}] and cites {tok}, "
+                            f"but score.py computes {sorted(wants)} for those rows"
+                        )
+                    continue
                 if tok in produced or tok in PROSE_ALLOWLIST:
                     continue
                 problems.append(
@@ -273,6 +309,24 @@ def check_markdown():
                     f"produce and PROSE_ALLOWLIST does not justify"
                 )
     return problems
+
+
+def _mentions(line, label):
+    """True if `line` clearly refers to the candidate named by `label`."""
+    key = label.split("(")[0].strip()
+    for junk in ("A  ", "B19 ", "B49 ", "C   ", "E   ", "D   "):
+        key = key.replace(junk, "")
+    key = key.split()[0].strip("`*|") if key else ""
+    if len(key) < 2:
+        return False
+    # Word-boundary match, so short labels like "bt"/"ffn" are found without
+    # matching inside "debt" or "different". Missing a short label caused a
+    # false positive: a line citing ffn/bt scores while naming financetoolkit.
+    if re.search(rf"(?<![\w-]){re.escape(key)}(?![\w-])", line, re.IGNORECASE):
+        return True
+    # also match the hyphenated prose form of a multi-word label
+    hyph = re.sub(r"\s+", "-", label.split("(")[0].strip())
+    return bool(hyph) and hyph.lower() in line.lower()
 
 
 if __name__ == "__main__":

@@ -44,14 +44,19 @@ def score(rel, econ, cost):
 # (label, reliability, economy, cost, note)
 ROWS = [
     ("-- Decision 1: committee engine (FIT-GATED, see note) --", None, None, None, ""),
-    ("TauricResearch/TradingAgents", 8, 6, 10, "judged; PASSES fit gate; 31d idle, 8 rel/12mo, 19 contrib"),
-    ("virattt/ai-hedge-fund", 8, 5, 10, "UNMEASURED econ (probe never completed); FAILS fit gate anyway: persona ensemble, not the 14-node graph"),
-    ("DanisHack as DEPEND", 2, econ_from_net_new(8), 10, "rubric; econ MEASURED 2026-08-18: 8 net-new pkgs"),
+    ("TauricResearch/TradingAgents", 8, 6, 10,
+     "judged; PASSES fit gate; 31d idle, 8 rel/12mo, 19 contrib"),
+    ("virattt/ai-hedge-fund", 8, 5, 10,
+     "UNMEASURED econ (probe never completed); FAILS fit gate anyway: persona "
+     "ensemble, not the 14-node graph"),
+    ("DanisHack as DEPEND", 2, econ_from_net_new(8), 10,
+     "rubric; econ MEASURED 2026-08-18: 8 net-new pkgs"),
     ("DanisHack as VENDOR", 9, 10, 10, "rubric; 0 net-new pkgs; 160 relevant tests pass"),
 
     ("-- Decision 3: valuation --", None, None, None, ""),
     ("dafahentra/dcf-valuation-tool", 7, 9, 10, "judged; canonical MIT, 207 LOC, numpy+scipy only"),
-    ("EmanueleSturzo/DCF-Valuation-Model", 0, 10, 10, "judged; BLOCKED: licence omits modify/merge grant"),
+    ("EmanueleSturzo/DCF-Valuation-Model", 0, 10, 10,
+     "judged; BLOCKED: licence omits modify/merge grant"),
     ("Build-from-scratch valuation", 10, 10, 10, "judged; upper bound, costs the effort T9 avoids"),
 
     ("-- Ops layer --", None, None, None, ""),
@@ -60,25 +65,39 @@ ROWS = [
     ("langfuse", 8, 8, 10, "judged; 0d idle, MIT core, self-hostable"),
 
     ("-- Decision 4: data providers --", None, None, None, ""),
-    ("A  yfinance+FRED+SEC+finviz  $0", 5, 10, cost_from_usd(0), "judged; covers every required metric, no SLA on any of it"),
-    ("B19 A + FMP Starter    $19/mo", 7, 9, cost_from_usd(19), "judged; estimates VERIFIED at Starter (us-flag). rel 7 is an ESTIMATE - no live uptime test; at rel 6 option A wins"),
-    ("B49 A + FMP Premium    $49/mo", 7, 9, cost_from_usd(49), "judged; adds UK/CA + 30y history (both redundant) AND quarterly fundamentals (NOT redundant - see rev Q/Q, scoring 9.9)"),
+    ("A  yfinance+FRED+SEC+finviz  $0", 5, 10, cost_from_usd(0),
+     "judged; covers every required metric, no SLA on any of it"),
+    ("B19 A + FMP Starter    $19/mo", 7, 9, cost_from_usd(19),
+     "judged; estimates VERIFIED at Starter (us-flag). rel 7 is an ESTIMATE - "
+     "no live uptime test; at rel 6 option A wins"),
+    ("B49 A + FMP Premium    $49/mo", 7, 9, cost_from_usd(49),
+     "judged; adds UK/CA + 30y history (both redundant) AND quarterly "
+     "fundamentals (NOT redundant - see rev Q/Q, scoring 9.9)"),
     ("C   A + FMP Ultimate   $99/mo", 7, 9, cost_from_usd(99), "judged; adds 13F + 3000rpm"),
-    ("E   A + EODHD all-in  $100/mo", 6, 8, cost_from_usd(99.99), "judged; adds options+screener+fundamentals from one vendor but removes no existing dependency"),
-    ("D   Finnhub all-in   $3500/mo", 9, 10, cost_from_usd(3500), "judged; one vendor covers everything, absurd at this scale"),
+    ("E   A + EODHD all-in  $100/mo", 6, 8, cost_from_usd(99.99),
+     "judged; adds options+screener+fundamentals from one vendor but removes "
+     "no existing dependency"),
+    ("D   Finnhub all-in   $3500/mo", 9, 10, cost_from_usd(3500),
+     "judged; one vendor covers everything, absurd at this scale"),
 
     ("-- Decision: metrics library --", None, None, None, ""),
-    ("financetoolkit", 8, 8, 10, "judged econ (rubric would be 9.12 -> 89.4); EXECUTED: max_dd+beta agree w/ empyrical, Sharpe is PER-PERIOD"),
-    ("quantstats", 8, 7, 10, "judged econ (rubric would be 8.75 -> 88.2); 10 net-new, 8 of them plotting"),
+    ("financetoolkit", 8, 8, 10,
+     "judged econ (rubric would be 9.12 -> 89.4); EXECUTED: max_dd+beta agree "
+     "w/ empyrical, Sharpe is PER-PERIOD"),
+    ("quantstats", 8, 7, 10,
+     "judged econ (rubric would be 8.75 -> 88.2); 10 net-new, 8 of them plotting"),
     ("empyrical-reloaded", 4, 9.5, 10, "judged; 248d idle, 0 releases/12mo, upstream dead 753d"),
     ("ffn", 8, 5, 10, "judged; 14 net-new incl scikit-learn"),
     ("bt", 8, 4, 10, "judged; 16 net-new; weight-rebalancing model, not discrete tickets"),
 
     ("-- Gated / rejected --", None, None, None, ""),
     ("OpenBB + mcp-server", 8, econ_from_net_new(86), 10, "rubric; 86 net-new pkgs; AGPL-3.0-only"),
-    ("Kronos", 4, econ_from_net_new(14), 10, "rubric; 14 net-new pkgs. NB +987MB is NOT priced by the econ rubric"),
-    ("QuantMind", 7, econ_from_net_new(69), 10, "rubric; 69 net-new pkgs; dropped on FIT (1 of 14 nodes)"),
-    ("nautilus_trader", 9, econ_from_net_new(7), 10, "rubric; 7 net-new pkgs. REJECTED ON FIT: live-execution platform vs D5"),
+    ("Kronos", 4, econ_from_net_new(14), 10,
+     "rubric; 14 net-new pkgs. NB +987MB is NOT priced by the econ rubric"),
+    ("QuantMind", 7, econ_from_net_new(69), 10,
+     "rubric; 69 net-new pkgs; dropped on FIT (1 of 14 nodes)"),
+    ("nautilus_trader", 9, econ_from_net_new(7), 10,
+     "rubric; 7 net-new pkgs. REJECTED ON FIT: live-execution platform vs D5"),
     ("vectorbt", 7, econ_from_net_new(40), 10, "rubric; 40 net-new pkgs; Commons Clause, non-OSI"),
 ]
 
@@ -128,7 +147,7 @@ def self_check():
 
     # --- rows must agree with their own notes, not just be in range ---
     # A row marked `rubric` must carry the econ its stated net-new count implies.
-    for label, rel, econ, cost, note in ROWS:
+    for label, rel, econ, _cost, note in ROWS:
         if rel is None:
             continue
         if note.startswith("rubric"):
@@ -179,12 +198,12 @@ def self_check():
 
     # A row whose note says BLOCKED must score reliability 0 — a licence block
     # is not a reliability opinion that can drift upward.
-    for label, rel, econ, cost, note in ROWS:
+    for label, rel, _econ, _cost, note in ROWS:
         if rel is not None and "BLOCKED" in note and rel != 0:
             fail.append(f"{label}: note says BLOCKED but rel={rel}; must be 0")
 
     # A row whose label states a price must carry the cost that price implies.
-    for label, rel, econ, cost, _note in ROWS:
+    for label, rel, _econ, cost, _note in ROWS:
         if rel is None:
             continue
         m = re.search(r"\$([\d,]+(?:\.\d+)?)\s*/?mo", label)
@@ -266,7 +285,9 @@ def check_markdown():
                 continue
             # Strip arithmetic breakdowns like "(32+27+25.5)" or "16+28.5+30"
             # before extracting -- their terms are sub-score products, not scores.
-            scan = re.sub(r"\d+(?:\.\d+)?\s*[+x\u00d7]\s*\d+(?:\.\d+)?(?:\s*[+x\u00d7]\s*\d+(?:\.\d+)?)*", " ", line)
+            _num = r"\d+(?:\.\d+)?"
+            _op = r"\s*[+x\u00d7]\s*"
+            scan = re.sub(rf"{_num}{_op}{_num}(?:{_op}{_num})*", " ", line)
             # A score here is 20.0-100.0; sub-scores are 0-10 and measurements
             # (e.g. a 195-day drawdown) exceed 100.
             # "~89.4" marks a hypothetical (an alternative-rubric figure), not
@@ -296,7 +317,7 @@ def check_markdown():
                     # line that names candidates, the row is the authority. An
                     # allowlist entry overriding it is how N2 slipped through.
                     if tok not in wants:
-                        names = ", ".join(sorted(l for l, _w in named))
+                        names = ", ".join(sorted(lbl for lbl, _w in named))
                         problems.append(
                             f"{md}:{i}: line names [{names}] and cites {tok}, "
                             f"but score.py computes {sorted(wants)} for those rows"

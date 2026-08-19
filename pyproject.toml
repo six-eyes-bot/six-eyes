@@ -1,0 +1,82 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "desk"
+version = "0.1.0"
+description = "The Desk — a cron-driven AI investment committee. Education only; places no orders."
+readme = "README.md"
+# Floor 3.11: the version DanisHack's 160 vendor-target tests are verified against.
+# Ceiling <3.15: measured constraint from litellm.
+requires-python = ">=3.11,<3.15"
+
+# Dependency set per internal-docs/adr/0001-dependency-selection.md (Accepted).
+# NOT here, deliberately: openbb, openbb-mcp-server (AGPL-3.0-only, +86 packages,
+# zero required metrics the direct providers do not already serve).
+dependencies = [
+    "yfinance",         # primary market data
+    "finvizfinance",    # SCREENER ONLY - ticker_fundament() is broken upstream
+    "financetoolkit",   # metrics, ratios, technicals, CAPM; forces pandas 3.0.5
+    "litellm",          # LLM gateway; binds the Python ceiling at <3.15
+    "langfuse",         # per-step tracing
+    "pydantic",
+    "pyyaml",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "pandas-stubs",
+    "pip-tools>=7",
+]
+
+[tool.setuptools.packages.find]
+include = ["desk*"]
+
+# ---------------------------------------------------------------------------
+# ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# STAGE B will append the vendored engine's files here, generated from
+# engine/.vendored-manifest by `make tooling-config`.
+# An ENUMERATED file list, never a directory glob -- a glob would exempt the
+# four analyst nodes T6 adds *inside* engine/ from lint forever.
+extend-exclude = []
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "B", "UP"]
+
+# ---------------------------------------------------------------------------
+# mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.11"
+files = ["desk", "tests"]
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+# NOT `ignore_missing_imports = true` globally -- that silently disables type
+# checking against every dependency.
+#
+# There is deliberately no overrides block yet. T1 imports none of the untyped
+# libraries, and `warn_unused_configs` correctly flags a pre-declared exemption
+# for an import that does not exist. T2 adds entries here as it actually
+# imports yfinance / finvizfinance / financetoolkit -- one module at a time,
+# each a review-worthy change. See internal-docs/VENDORING.md section 4.
+#
+# pandas is typed via `pandas-stubs` (a dev dependency), not exempted.
+
+# ---------------------------------------------------------------------------
+# pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# STAGE B: `engine` joins norecursedirs. pytest needs this explicitly -- ruff's
+# and mypy's exclusions do not stop pytest collecting the upstream's own tests.
+norecursedirs = [".venv", "build", "dist"]
+addopts = "-ra --strict-markers"

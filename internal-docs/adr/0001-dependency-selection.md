@@ -155,7 +155,7 @@ It ships `fmp_model.py` **and** `yfinance_model.py` — natively supporting both
 
 **Pandas 3.0 gate: cleared.** DanisHack's suite re-run under the `pandas 3.0.5` that `financetoolkit` forces — **342 passed, 3 warnings in 29.50s**, the same pre-existing `websockets`/`polygon` deprecations as the pandas 2.x run. Adopting `financetoolkit` does not break the DanisHack vendoring.
 
-**Operator decision, 2026-08-18:** vendoring DanisHack is **confirmed** by the project owner. This resolves the donor question only — the remaining ADR items (OpenBB drop, T9 licence blocker, the $49 subscription, and the T19 yfinance/ToS call) are still **Proposed** and unsigned.
+**Operator decision, 2026-08-18:** vendoring DanisHack is **confirmed** by the project owner. This resolves the donor question only — the remaining ADR items (OpenBB drop, T9 licence blocker, the now-$19 subscription, and the T19 yfinance/ToS call) are still **Proposed** and unsigned.
 
 ### Decision 3 — Valuation
 
@@ -190,19 +190,20 @@ Full coverage-by-cost matrix in [`0001-scoring.md` §3.2](0001-scoring.md). The 
 | Option | Monthly | Verdict |
 |---|---:|---|
 | **A** — yfinance + FRED + SEC + finviz(screener) | **$0** | Covers everything. Zero contractual guarantees. |
-| **B** — A + FMP Premium | **$49** | **Recommended.** |
+| **B19** — A + FMP **Starter** | **$19** | **Recommended.** Estimates verified at this tier (§9.3). Score 83.3 |
+| B49 — A + FMP Premium | $49 | Score 80.6. UK/CA + 30y history both redundant here |
 | C — A + FMP Ultimate | $99 | +13F holdings, +3,000 rpm. Not needed yet. |
 | E — A + EODHD ALL-IN-ONE | $99.99 | Pays $100 and removes no dependency. |
 | D — Finnhub All-In-One | **$3,500** | See below. |
 
 **The cheapest set covering every required metric is $0/month.** That is the honest answer and it should be stated plainly rather than dressed up.
 
-**The recommendation is $49/month anyway**, because coverage is not the thing being bought. Two measurements explain why:
+**The recommendation is $19/month anyway**, because coverage is not the thing being bought. (Originally $49 Premium; the adversarial audit forced the estimates-tier question to be resolved, and estimates turn out to be available at Starter $19 with US coverage — [scoring §9.3](0001-scoring.md). Premium's UK/Canada and 30-year history are both redundant here.) Two measurements explain why a paid fallback is worth anything at all:
 
 - `^TNX` (UST 10Y) via yfinance returns **17 rows for `period="2y"`** and 16 rows for an explicit two-year `start`/`end` — but 1,254 rows for `period="5y"`. No exception. No warning. A macro analyst would compute "UST 10Y y/y" from three weeks of data and report it with full confidence. Mitigated here by routing UST 10Y to FRED (`DGS10`, **16,859 observations**, keyless) — but the class of failure is not mitigated, only this instance of it.
 - `finvizfinance('NVDA').ticker_fundament()` raises `AttributeError: 'NoneType' object has no attribute 'find_all'` — reproducible on AAPL too. The library last shipped 226 days ago and its median first response on recent closed issues is **4,107 hours (171 days)**. TICKETS.md T2 assigns it "screener **+ fundamentals**"; the fundamentals half is broken today.
 
-$49 buys a licensed second source for fundamentals, estimates and technicals, 30 years of history, and 750 rpm of documented headroom. It does **not** remove yfinance, because no provider measured sells options-chain IV *and* short interest below $99.99, and none sells both together under $3,500.
+$19 buys a licensed second source for fundamentals, estimates and technicals with US coverage and 300 rpm — five years of history rather than thirty, which is irrelevant because yfinance already supplies a measured 27 years free. It does **not** remove yfinance, because no provider measured sells options-chain IV *and* short interest below $99.99, and none sells both together under $3,500.
 
 **Finnhub deserves a specific note** because DESK_DESIGN §3 still treats it as a primary. Its pricing has bifurcated: a market-data ladder at $49.99/$129.99/$199.99 that is **price and OHLC only**, and a fundamentals ladder that goes **free → $3,500/month with nothing in between**. The free tier has no financials, no estimates, no ownership and no OHLC history. Finnhub is unusable for The Desk at any price we would pay.
 
@@ -355,7 +356,7 @@ Consequently the Consequences/Action-Item criterion *"No AGPL package in the env
 
 **2. DanisHack: reliability lost to economy — but only because the mode changed.** As a DEPEND it is close to indefensible: 185 days idle, bus factor 1, no releases. Under the T0 rule, VENDOR mode makes upstream's cadence irrelevant, and what remains is a clean MIT licence, **160** verified-passing tests over the modules taken, and **0 net new packages** for 1,853 LOC. This is the trade the vendor/depend distinction exists to make. **The risk we accept: the day we copy those modules, we own them, and nobody upstream will fix a bug in them.** With 160 relevant tests coming along, that is an acceptable trade — and it is a genuine trade, not a free lunch.
 
-**3. Data providers: economy and cost both lost to reliability, for $49/month.** Option A covers every required metric for **$0**. We are recommending $49 anyway. Strictly on criteria 2 and 3, that is the wrong call. Criterion 1 outranks both, and two measured live failures — `^TNX` returning 17 bars without an error, finvizfinance's fundamentals scraper throwing on every ticker — are what $49 is insuring against. **The uncomfortable part, stated plainly: $49 does not remove the fragile dependency. It only gives us somewhere to fail over to.** yfinance stays on the critical path for options and short interest at every price point below $3,500/month.
+**3. Data providers: economy and cost both lost to reliability, for $19/month.** Option A covers every required metric for **$0** and scores 80.0; B19 scores 83.3. Strictly on criteria 2 and 3, paying anything is the wrong call. Criterion 1 outranks both, and two measured live failures — `^TNX` returning 17 bars without an error, finvizfinance's fundamentals scraper throwing on every ticker — are what $19 is insuring against. **The uncomfortable part, stated plainly: $19 does not remove the fragile dependency. It only gives us somewhere to fail over to.** yfinance stays on the critical path for options and short interest at every price point below $3,500/month. The margin over free is 3.3 points, so this is a close call that a modest re-weighting toward cost would flip — run `score.py` before re-litigating it.
 
 **4. OpenBB: the two criteria agreed, which is rare enough to note.** +86 packages is the worst economy score in the audit, and it serves no unique metric. Even re-weighted to reliability 60 / economy 10 / cost 30 it only reaches 79/100 — and the AGPL question is a licence matter that no weighting touches.
 
@@ -367,7 +368,7 @@ Consequently the Consequences/Action-Item criterion *"No AGPL package in the env
 
 **Easier**
 
-- One subscription, one invoice, $49/month. No API-key sprawl across five vendors.
+- One subscription, one invoice, $19/month. No API-key sprawl across five vendors.
 - 134 packages instead of 220. Faster CI, smaller images, fewer CVE surfaces to track.
 - No AGPL anywhere in the tree — T1's licence audit becomes a short document with a clean result.
 - T9 drops further than TICKETS.md hoped: `dcf_engine.py` is 207 LOC with no data coupling, so "repoint at `desk/data.py`" is not a code change at all, just a caller that passes a dict.
@@ -546,12 +547,19 @@ Diff-style against `internal-docs/TICKETS.md`. **That file is not modified by th
 
 **New — T18 · Data provider subscription**
 ```diff
-+ Subscribe to FMP Premium, $49/mo billed annually.
-+ BEFORE PURCHASE, verify one thing the pricing page did not resolve: that
-+   analyst estimates / price-target consensus are included at Premium and not
-+   held back to Ultimate. The plan card names "Full Fundamentals and Ratios"
-+   but does not name Estimates, and the comparison table's per-tier legend
-+   could not be extracted.
++ Subscribe to FMP STARTER, $19/mo. NOT Premium.
++   Estimates + price-target consensus are at Starter with US coverage
++   (verified 2026-08-18, scoring section 9.3). Premium's UK/CA coverage is
++   irrelevant (US-only equities) and its 30y history is redundant against
++   yfinance's measured free 27y. Premium scores 80.6 vs Starter's 83.3.
++ Prefer monthly over annual until T8 reports expectancy - the ADR's own
++   revisit clause says drop to \$0 if the committee shows no edge, which an
++   annual prepay forecloses.
++ RESOLVED 2026-08-18 (was: verify estimates tier before purchase).
++   Estimates, price-target consensus, ratings snapshot and historical stock
++   grades all carry the us-flag marker at STARTER. The comparison table's
++   marks are coverage flags (sample -> us -> us-uk-can -> globe), not
++   availability ticks. See scoring section 9.3.
 + Do NOT subscribe to: Alpha Vantage (free tier 25 req/day), EODHD (20/day),
 +   Finnhub (fundamentals ladder jumps free -> $3,500/mo with nothing between),
 +   Tiingo (no fundamentals below a further add-on), Finviz Elite ($39.50/mo

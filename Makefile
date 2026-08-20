@@ -9,7 +9,7 @@ BIN      = $(VENV)/bin
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup lock test lint type unit clean
+.PHONY: help setup lock test lint type unit clean vendor-engine vendor-manifest tooling-config
 
 help:
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-16s %s\n", $$1, $$2}'
@@ -33,6 +33,15 @@ lock: ## regenerate requirements.lock from pyproject (hashes included)
 	$(BIN)/pip-compile --quiet --generate-hashes --strip-extras \
 		--extra dev --output-file requirements.lock pyproject.toml
 	@echo "locked $$(grep -c '^[a-zA-Z]' requirements.lock) distributions"
+
+vendor-engine: ## re-copy engine/ from the SHA pinned in versions.lock
+	$(BIN)/python scripts/vendor_engine.py vendor
+
+vendor-manifest: ## regenerate engine/.vendored-manifest FROM the pinned upstream SHA
+	$(BIN)/python scripts/vendor_engine.py manifest
+
+tooling-config: ## regenerate ruff/pytest exclusions FROM the manifest
+	$(BIN)/python scripts/vendor_engine.py tooling-config
 
 lint: ## ruff
 	$(BIN)/ruff check .

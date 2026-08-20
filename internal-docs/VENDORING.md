@@ -57,8 +57,27 @@ the three cases:
 | Tool | Mechanism | Why not the obvious one |
 |---|---|---|
 | ruff | `extend-exclude` = explicit paths | a glob exempts T6's files forever |
-| mypy | per-module `ignore_errors` | mypy's `exclude` does **not** stop analysis of an excluded module that is *imported* |
+| mypy | per-module `ignore_errors`, **exact module names** | mypy's `exclude` does **not** stop analysis of an excluded module that is *imported* — and `module = ["tradingagents.*"]` is the ruff mistake through the back door: T6's analysts live at `engine/tradingagents/agents/analysts/`, squarely inside that glob |
 | pytest | `testpaths` + `norecursedirs` | otherwise it collects the upstream's own tests |
+
+**Measured 2026-08-19.** The exemptions are load-bearing, not decoration:
+vendored source produces **179 ruff errors** and **100 mypy errors in 39
+files** under our config. `engine/` is in mypy's `files` deliberately — the
+manifest-derived exemptions cover the vendored modules by exact name, so
+anything new under `engine/` is type-checked from its first commit.
+
+**Do not hand-derive mypy module names.** `make tooling-config` asks mypy's own
+resolver (`mypy.find_sources.create_source_list`). Two hand-rolled rules were
+tried during T1 and both were wrong, in opposite directions:
+
+| Path | Hand-rolled guess | What mypy actually calls it |
+|---|---|---|
+| `engine/scripts/smoke_structured_output.py` | `scripts.smoke_structured_output` | `smoke_structured_output` |
+| `engine/tradingagents/agents/analysts/market_analyst.py` | `market_analyst` (no `__init__.py` in `analysts/`) | `tradingagents.agents.analysts.market_analyst` (`namespace_packages` defaults to True) |
+
+Getting it wrong **fails silently**: a non-matching override never applies, the
+module stays checked, and the only signal is a `warn_unused_configs` note that
+does not fail the build.
 
 The manifest carries a **sha256 per file** and an invariant asserts contents
 still match — without it, an in-place edit to vendored source is invisible to

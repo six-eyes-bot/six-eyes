@@ -1,0 +1,23 @@
+# Pinned external sources that are NOT Python distributions.
+#
+# `requirements.lock` pins the dependency graph. This file pins vendored
+# SOURCE -- code copied into this tree, where a version number means nothing
+# and only a commit SHA is reproducible.
+
+# TauricResearch/TradingAgents -- vendored at engine/ (ADR 0001, T1 L4/D3).
+# This is the COMMIT sha. v0.3.1 is an ANNOTATED tag, so it has two SHAs: the
+# tag object 5a3d1b51d339202d03c4b57c1a1012f69376495f and the commit below.
+# Pinning the tag object would resolve to a tag, not a tree.
+tradingagents_sha = 01477f9afb7a47b849ed4c9259d3a9a4738d9fda
+tradingagents_tag = v0.3.1
+tradingagents_date = 2026-07-05
+tradingagents_licence = Apache-2.0
+
+# --- pandas provenance (T1 spec M9) -------------------------------------
+# `financetoolkit` forces pandas==3.0.5.
+# MEASURED: DanisHack's 160 vendor-target tests pass under both pandas 2.x
+#           and 3.0.5.
+# NOT MEASURED: whether financetoolkit's drawdown-duration / recovery
+#           functions run under pandas 2.x. That single measurement is the
+#           escape route if the 3.0.5 pin ever breaks. It is a note, not a
+#           T1 task.

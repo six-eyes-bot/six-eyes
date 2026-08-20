@@ -146,3 +146,111 @@ TradingAgents may still be right, but on **fit** (its graph matches the source s
 ### Rejected finding (with evidence)
 
 Red-team claimed DanisHack's ported tests import `polygon`, which would break the "0 net new packages" claim. **Measured and false.** The 8 test files covering the taken modules import only `pytest`, `unittest`, `datetime`, `json`, `csv`, `__future__`, `src`. `grep -rlE "polygon|websockets|alpaca" tests/` returns nothing; the deprecation warning originates in `src/config/settings.py` transitively. econ 10 stands.
+
+---
+
+# Stage B — vendoring the engine (2026-08-19)
+
+Branch `desk-t1-engine` off `main` @ `4a11a6d`. Executes T1 spec rev 3 stage B:
+D3 (`engine/`), the manifest, `tooling-config`, and invariants 5, 6 and 8.
+Steps 1–4 of the ship loop were already banked in spec rev 3, so this is step 5
+onward: TDD, per-step review, drift check, verification gate.
+
+## The pin
+
+`TauricResearch/TradingAgents` @ **`01477f9afb7a47b849ed4c9259d3a9a4738d9fda`**.
+
+`v0.3.1` is an **annotated** tag and therefore carries two SHAs — the tag object
+`5a3d1b51d339202d03c4b57c1a1012f69376495f` and the commit above. The commit is
+pinned. Recorded in `versions.lock` and `engine/PROVENANCE.md` because pinning
+the tag object is a plausible-looking mistake that resolves to a tag, not a tree.
+
+## Measurements taken
+
+| Claim | Measured |
+|---|---|
+| upstream size | 158 files, 4,740,672 bytes at the pinned SHA |
+| vendored | **84 files, 644 KB** |
+| `assets/` | 11 files, 4.0 MB — **85% of the payload**, all README screenshots |
+| `backtrader` / `redis` | declared in upstream `pyproject.toml`, **imported by zero `.py` files** — independently re-confirms ADR 0001 |
+| upstream vs our ruff config | **179 errors** |
+| upstream vs our mypy config | **100 errors in 39 files** |
+| `NOTICE` | absent — so Apache-2.0 §4(d) does not bind. §4(b) does |
+| upstream `LICENSE` appendix | unfilled (`Copyright [yyyy] [name of copyright owner]`); body intact |
+| `.env.enterprise.example` | **Azure OpenAI** settings, not a separately-licensed `ee/` tree |
+
+That last row was checked specifically because `litellm` and `langfuse` both
+carve out enterprise directories under different terms. This upstream does not.
+
+## Decisions taken during execution
+
+| # | Decision | Why |
+|---|---|---|
+| B1 | Omit `assets/`, `Dockerfile`, `docker-compose.yml`, `.dockerignore`, `requirements.txt`, `.env*`, `.gitignore` **in addition to** the spec's `pyproject.toml` / `tests/` / `.github/` | **Deviation from the spec's literal three-item list**, taken under `VENDORING.md` §4b's general rule and recorded in `engine/PROVENANCE.md`. `assets/` is 85% of the bytes and zero function; the Docker files build from the omitted `pyproject.toml` and so cannot work; `requirements.txt` contains only `.`. Cost: broken image links in the vendored `README.md`. |
+| B2 | `engine/` **is** in mypy's `files` | The spec's mypy row only makes sense if mypy actually walks `engine/`. With manifest-derived exemptions by exact name, anything new under `engine/` is typed from its first commit — which is the point. |
+| B3 | mypy module names come from **mypy's own resolver**, not a hand-rolled rule | Two hand-rolled rules were written and both were wrong, in opposite directions (see below). |
+| B4 | `scripts/` added to mypy's `files` | It is first-party code. Adding it immediately found a real bug — `BuildSource.path` is `str \| None` and was being passed to `Path()` unguarded. |
+
+## The mypy module-name trap (worth carrying)
+
+The exemption list must be **exact module names**. `module = ["tradingagents.*"]`
+is the enumerated-vs-glob mistake reintroduced through mypy's back door: T6's
+four analyst nodes land in `engine/tradingagents/agents/analysts/`, squarely
+inside that glob, and would be born untyped.
+
+Deriving those names by hand failed twice:
+
+| Path | Guess | Actual |
+|---|---|---|
+| `engine/scripts/smoke_structured_output.py` | `scripts.smoke_structured_output` | `smoke_structured_output` |
+| `engine/tradingagents/agents/analysts/market_analyst.py` | `market_analyst` | `tradingagents.agents.analysts.market_analyst` |
+
+The first guess was "strip `engine/`, join with dots"; the second was "climb
+while `__init__.py` exists". `namespace_packages` defaults to True, which breaks
+both. **The failure is silent** — a non-matching override never applies and the
+only signal is a `warn_unused_configs` note that does not fail the build. That
+note is the only reason it was caught.
+
+## Per-step review (ship-workflow §6) — NON-SKIPPABLE
+
+Scope: `scripts/vendor_engine.py`, `pyproject.toml`, `Makefile`,
+`versions.lock`, `tests/test_invariants.py`, `engine/PROVENANCE.md`.
+Stance: adversarial — assume defects; "tests pass" is not correctness.
+
+| # | Finding | Sev | Triage |
+|---|---|---|---|
+| R1 | `cmd_vendor` called `shutil.rmtree(ENGINE)` directly beneath a comment promising it would *not* — would delete T6's first-party nodes on every re-vendor | **High** | **Fixed.** Unlinks only manifest-claimed paths. |
+| R2 | `main()` called `parse_args()` twice | Low | **Fixed.** |
+| R3 | Manifest generated from the working tree would re-bless T6's files as vendored | **High** | **Prevented by design** — `manifest` downloads the pinned SHA and fails closed. Demonstrated: the first run failed closed on a TLS error rather than falling back. |
+| R4 | `test_a_vendored_file_is_not_linted` picked `sample[0]` = `engine/cli/__init__.py`, which passes our config, so it asserted nothing | Med | **Fixed.** Rewritten set-wide; now proves 179 real errors are suppressed. |
+| R5 | TLS verification failed on a bare interpreter; tempting fix is an unverified context | **High** | **Fixed properly** — `certifi` bundle, never `_create_unverified_context`. The pin is meaningless without TLS. |
+| R6 | `Path(src.path)` where `src.path` is `str \| None` | Med | **Fixed** — found by mypy once `scripts/` entered its scope, not by review. |
+| R7 | Tarball extraction could write outside the target directory | Med | **Fixed** — members with absolute paths or `..` are rejected before extraction. |
+| R8 | Canary files could leak into the tree if a test body raised | Med | **Fixed** — both canaries unlink in `finally`, and both assert no canary is already present. |
+
+**Rejected:** none. Every finding above survived verification and was implemented.
+
+## Proof the gates can fail
+
+Each invariant was mutation-tested, not asserted:
+
+| Mutation | Result |
+|---|---|
+| `extend-exclude = ["engine/**"]` (the forbidden glob) | invariant 5 fails *stale tooling config, 84 files*; invariant 8 fails *"the gate has a hole in it"* |
+| append one line to `engine/tradingagents/default_config.py` | invariant 6 names the edited file and points at §4(b) |
+| `module = ["tradingagents.*"]` | both mypy invariants fail, **and** the type canary at T6's exact path is silently accepted — proving the glob is the real hazard |
+
+## Verification (ship-workflow §8)
+
+```
+$ make test
+ruff check .   -> All checks passed!
+mypy           -> Success: no issues found in 85 source files
+pytest -q      -> 27 passed in 8.85s
+make test: all green
+```
+
+CI's other three gates re-run locally on this branch: `.gitignore` blocks none
+of the 84 vendored files; the secret-shaped-file grep is clean; `score.py
+--check` reports 0 failures. `internal-docs/TICKETS.md` and
+`internal-docs/DESK_DESIGN.md` are unmodified.

@@ -10,7 +10,11 @@ manifest integrity), which cannot exist before engine/ does.
 
 from __future__ import annotations
 
+import hashlib
 import re
+import subprocess
+import sys
+import tomllib
 from importlib.metadata import distributions
 from pathlib import Path
 
@@ -231,3 +235,271 @@ class TestCopyleftDetectorCanFail:
         assert is_strong_copyleft(
             "GPL-3.0-only", None, ["License :: OSI Approved :: MIT License"]
         ) is True
+
+
+# ==========================================================================
+# Stage B — the vendored engine
+#
+# These three exist because a vendored tree has two failure modes that no
+# amount of care prevents: the quality gate quietly widening until it exempts
+# first-party code, and vendored source being edited in place so our
+# Apache-2.0 statement of changes silently stops being true.
+# ==========================================================================
+
+ENGINE = REPO_ROOT / "engine"
+MANIFEST = ENGINE / ".vendored-manifest"
+
+
+def _manifest() -> dict[str, str]:
+    """{repo-relative path: sha256} from engine/.vendored-manifest."""
+    assert MANIFEST.exists(), (
+        f"{MANIFEST.relative_to(REPO_ROOT)} missing — run `make vendor-manifest`"
+    )
+    entries: dict[str, str] = {}
+    for raw in MANIFEST.read_text().splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        digest, _, path = line.partition(" ")
+        entries[path.strip()] = digest
+    assert entries, "manifest parsed to zero entries — the parser or the file is wrong"
+    return entries
+
+
+def _sha256(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 16), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+# --------------------------------------------------------------------------
+# 5. the derived exclusion lists still equal the manifest
+# --------------------------------------------------------------------------
+def test_exclusions_equal_manifest() -> None:
+    """ruff's exclusions are DERIVED from the manifest and must not drift.
+
+    The two directions mean opposite things and get different messages —
+    conflating them is how you spend an afternoon on the wrong problem.
+    """
+    manifest = set(_manifest())
+    with (REPO_ROOT / "pyproject.toml").open("rb") as fh:
+        cfg = tomllib.load(fh)
+    excluded = {
+        p for p in cfg["tool"]["ruff"]["extend-exclude"] if p.startswith("engine/")
+    }
+
+    stale_config = sorted(manifest - excluded)
+    over_excluded = sorted(excluded - manifest)
+
+    assert not stale_config, (
+        "STALE TOOLING CONFIG — vendored per the manifest but not excluded from "
+        f"lint: {stale_config[:5]}{'...' if len(stale_config) > 5 else ''} "
+        f"({len(stale_config)} file(s)). Run `make tooling-config`."
+    )
+    assert not over_excluded, (
+        "OVER-EXCLUDED — excluded from lint but NOT vendored, so this is "
+        f"first-party code that has been silently exempted: {over_excluded}. "
+        "Never hand-edit extend-exclude; run `make tooling-config`."
+    )
+
+
+# --------------------------------------------------------------------------
+# 6. every vendored file still matches its recorded hash
+# --------------------------------------------------------------------------
+def test_vendored_files_match_manifest_hashes() -> None:
+    """Without this, an in-place edit to vendored source is invisible to CI —
+    and our Apache-2.0 §4(b) statement of changes silently becomes false."""
+    missing, modified = [], []
+    for rel, want in sorted(_manifest().items()):
+        path = REPO_ROOT / rel
+        if not path.is_file():
+            missing.append(rel)
+        elif _sha256(path) != want:
+            modified.append(rel)
+
+    assert not missing, (
+        f"vendored file(s) in the manifest but absent from the tree: {missing}. "
+        "Run `make vendor-engine`, or regenerate the manifest if the pin moved."
+    )
+    assert not modified, (
+        f"vendored file(s) EDITED IN PLACE: {modified}. Vendored source is "
+        "byte-identical to upstream at the pinned SHA by construction. If the "
+        "change is deliberate, record it in engine/PROVENANCE.md under 'Local "
+        "changes' (Apache-2.0 §4(b)) and re-run `make vendor-manifest`."
+    )
+
+
+def test_engine_files_outside_the_manifest_are_first_party() -> None:
+    """Not a failure — a census. Files under engine/ that the manifest does not
+    claim are ours, and are linted, typed and tested. Printed so the set cannot
+    grow unnoticed between reviews."""
+    manifest = set(_manifest())
+    on_disk = {
+        p.relative_to(REPO_ROOT).as_posix()
+        for p in ENGINE.rglob("*")
+        if p.is_file() and p.name != ".vendored-manifest"
+    }
+    first_party = sorted(on_disk - manifest)
+    print(f"\n  [engine] {len(first_party)} first-party file(s) under engine/: {first_party}")
+
+
+# --------------------------------------------------------------------------
+# 8. the mutation test — prove an unblessed file under engine/ IS linted
+# --------------------------------------------------------------------------
+def test_unblessed_file_under_engine_is_linted() -> None:
+    """Invariant 5 compares two lists. This proves the lists do something.
+
+    The failure this guards against is the one the whole enumerated-exclusion
+    policy exists for: a directory glob would exempt every future file under
+    engine/ — including T6's four analyst nodes, the highest-value net-new
+    code in Track B — and nothing would ever report it.
+    """
+    ruff = REPO_ROOT / ".venv" / "bin" / "ruff"
+    if not ruff.exists():  # pragma: no cover - depends on provisioning
+        pytest.skip("ruff not installed; run `make setup`")
+
+    canary = ENGINE / "_lint_canary_delete_me.py"
+    assert not canary.exists(), "canary already present — a previous run leaked"
+    # `import os` unused (F401) + a line well past line-length 100 (E501).
+    canary.write_text("import os\n" + f"x = '{'y' * 130}'\n")
+    try:
+        # `ruff check .` is what `make lint` runs. Passing the path explicitly
+        # would bypass extend-exclude and prove nothing.
+        proc = subprocess.run(
+            [str(ruff), "check", "."],
+            cwd=REPO_ROOT, capture_output=True, text=True,
+        )
+        assert proc.returncode != 0, (
+            "ruff PASSED with a deliberately broken file at "
+            f"{canary.relative_to(REPO_ROOT)}. The exclusion list is exempting "
+            "files it should not — the gate has a hole in it."
+        )
+        assert canary.name in proc.stdout, (
+            f"ruff failed, but not because of {canary.name}. Output:\n{proc.stdout}"
+        )
+    finally:
+        canary.unlink()
+
+
+def test_vendored_files_are_not_linted() -> None:
+    """The converse of invariant 8, and the reason the exclusions exist at all.
+
+    Asserted over the whole vendored set rather than one sample: the first
+    attempt picked `engine/cli/__init__.py`, which is trivial enough to pass
+    our config unmodified, so it proved nothing.
+    """
+    ruff = REPO_ROOT / ".venv" / "bin" / "ruff"
+    if not ruff.exists():  # pragma: no cover
+        pytest.skip("ruff not installed; run `make setup`")
+
+    vendored_py = sorted(p for p in _manifest() if p.endswith(".py"))
+    assert vendored_py, "no vendored .py files in the manifest — nothing to prove"
+
+    # 1. Upstream genuinely does not satisfy our lint config, so the exemption
+    #    is load-bearing rather than a coincidence of upstream being tidy.
+    #    --no-force-exclude makes explicitly-named paths bypass the exclusion.
+    direct = subprocess.run(
+        [str(ruff), "check", "--no-force-exclude", *vendored_py],
+        cwd=REPO_ROOT, capture_output=True, text=True,
+    )
+    assert direct.returncode != 0, (
+        "the entire vendored tree passes our lint config unmodified, so the "
+        "exclusion list is not actually suppressing anything and this test "
+        "cannot distinguish a working gate from a broken one."
+    )
+
+    # 2. And none of them are reported by the run `make lint` actually does.
+    checked = subprocess.run(
+        [str(ruff), "check", "."], cwd=REPO_ROOT, capture_output=True, text=True
+    )
+    leaked = sorted(f for f in vendored_py if f in checked.stdout)
+    assert not leaked, (
+        f"vendored file(s) reported by `ruff check .`: {leaked} — not excluded."
+    )
+
+
+# --------------------------------------------------------------------------
+# 5b. the mypy exemption list is enumerated and matches the manifest
+# --------------------------------------------------------------------------
+def _mypy_vendor_overrides() -> list[str]:
+    with (REPO_ROOT / "pyproject.toml").open("rb") as fh:
+        cfg = tomllib.load(fh)
+    for ov in cfg["tool"]["mypy"].get("overrides", []):
+        if ov.get("ignore_errors"):
+            mods = ov["module"]
+            return [mods] if isinstance(mods, str) else list(mods)
+    return []
+
+
+def test_mypy_exemptions_are_enumerated_not_globbed() -> None:
+    """A glob here is the ruff mistake through mypy's back door.
+
+    `module = ["tradingagents.*"]` reads as the obvious way to exempt the
+    vendored engine. It also exempts engine/tradingagents/agents/analysts/,
+    which is exactly where T6's four analyst nodes go — so they would be born
+    untyped and stay that way silently.
+    """
+    globbed = sorted(m for m in _mypy_vendor_overrides() if "*" in m)
+    assert not globbed, (
+        f"globbed mypy exemption(s): {globbed}. Exemptions must be exact "
+        "module names derived from the manifest — run `make tooling-config`."
+    )
+
+
+def test_mypy_exemptions_match_manifest() -> None:
+    """Every exempted module is a vendored file, and every vendored module is
+    exempted. A module here that the manifest does not back is first-party code
+    silently exempted from typing."""
+    sys.path.insert(0, str(REPO_ROOT / "scripts"))
+    try:
+        from vendor_engine import vendored_modules
+    finally:
+        sys.path.pop(0)
+
+    expected = set(vendored_modules(sorted(_manifest())))
+    actual = set(_mypy_vendor_overrides())
+    assert expected, "mypy resolved zero vendored modules — the resolver call is wrong"
+
+    assert not (expected - actual), (
+        f"vendored module(s) not exempted: {sorted(expected - actual)[:5]} — "
+        "run `make tooling-config`."
+    )
+    assert not (actual - expected), (
+        f"module(s) exempted from typing but NOT vendored: "
+        f"{sorted(actual - expected)} — first-party code must stay typed."
+    )
+
+
+def test_a_new_file_under_engine_is_type_checked() -> None:
+    """Invariant 8's typing analogue, at the exact path T6 will use.
+
+    Placed inside engine/tradingagents/agents/analysts/ deliberately: that is
+    the directory a `tradingagents.*` glob would have swallowed.
+    """
+    mypy_bin = REPO_ROOT / ".venv" / "bin" / "mypy"
+    if not mypy_bin.exists():  # pragma: no cover
+        pytest.skip("mypy not installed; run `make setup`")
+
+    target_dir = ENGINE / "tradingagents" / "agents" / "analysts"
+    assert target_dir.is_dir(), "expected T6's analyst directory to exist"
+    canary = target_dir / "_type_canary_delete_me.py"
+    assert not canary.exists(), "canary already present — a previous run leaked"
+    canary.write_text("def f() -> int:\n    return 'not an int'\n")
+    try:
+        proc = subprocess.run(
+            [str(mypy_bin), "--follow-imports=skip", "--no-incremental", str(canary)],
+            cwd=REPO_ROOT, capture_output=True, text=True,
+        )
+        assert proc.returncode != 0, (
+            f"mypy PASSED a deliberate type error at "
+            f"{canary.relative_to(REPO_ROOT)}. A new first-party file under "
+            "engine/ is being exempted — the typing gate has a hole in it.\n"
+            f"{proc.stdout}"
+        )
+        assert "_type_canary_delete_me" in proc.stdout, (
+            f"mypy failed, but not on the canary:\n{proc.stdout}"
+        )
+    finally:
+        canary.unlink()

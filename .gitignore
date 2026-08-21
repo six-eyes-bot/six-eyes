@@ -75,3 +75,4 @@ htmlcov/
 *~
 .idea/
 .vscode/
+.cache/

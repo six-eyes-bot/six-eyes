@@ -503,3 +503,55 @@ def test_a_new_file_under_engine_is_type_checked() -> None:
         )
     finally:
         canary.unlink()
+
+
+# --------------------------------------------------------------------------
+# 9. finvizfinance is SCREENER ONLY (T2)
+# --------------------------------------------------------------------------
+def test_ticker_fundament_is_never_called() -> None:
+    """ADR 0001: `finvizfinance.ticker_fundament()` is broken upstream.
+
+    A comment saying so lasts exactly as long as the memory of whoever wrote
+    it. This asserts it mechanically instead.
+
+    Parsed with `ast`, NOT grepped. The first version of this test grepped the
+    source text and immediately failed on `finviz_provider.py`'s own docstring,
+    which mentions the function in order to forbid it — prose *about* a call is
+    not a call. Same false-positive class as T1's pandas-is-GPL bug, where
+    52,990 characters of bundled licence text discussing the GPL matched a
+    naive regex.
+    """
+    import ast
+
+    offenders = []
+    for path in sorted((REPO_ROOT / "desk").rglob("*.py")):
+        tree = ast.parse(path.read_text(), filename=str(path))
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Attribute) and node.attr == "ticker_fundament":
+                offenders.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}")
+            elif isinstance(node, ast.Name) and node.id == "ticker_fundament":
+                offenders.append(f"{path.relative_to(REPO_ROOT)}:{node.lineno}")
+    assert not offenders, (
+        f"finvizfinance.ticker_fundament() is referenced in code at {offenders}. "
+        "It is broken upstream; finviz is SCREENER ONLY per ADR 0001."
+    )
+
+
+def test_the_ticker_fundament_detector_can_actually_fail() -> None:
+    """Prove the AST check is not vacuous — the grep version it replaced would
+    also have passed a file that never mentions the call at all."""
+    import ast
+
+    tree = ast.parse("import finvizfinance\nfinvizfinance.ticker_fundament('NVDA')\n")
+    hits = [
+        n for n in ast.walk(tree)
+        if isinstance(n, ast.Attribute) and n.attr == "ticker_fundament"
+    ]
+    assert hits, "the detector would not notice a real call"
+
+    clean = ast.parse('"""mentions ticker_fundament in prose only."""\nx = 1\n')
+    prose = [
+        n for n in ast.walk(clean)
+        if isinstance(n, ast.Attribute) and n.attr == "ticker_fundament"
+    ]
+    assert not prose, "the detector still flags prose"

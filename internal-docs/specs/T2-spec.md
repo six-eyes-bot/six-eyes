@@ -162,3 +162,62 @@ understanding of those failures would prove only that I am self-consistent.
   shipped interface for tidiness is not worth a fork; validate against a
   frozenset instead.
 - **Vendor DanisHack `cache.py`.** See the main spec — measured, does not fit.
+
+---
+
+# Stage B — the LiteLLM gateway
+
+## Locked / decided
+
+| # | Decision | Why |
+|---|---|---|
+| B1 | **LiteLLM SDK, not the proxy server** | DESK_DESIGN targets "a self-hosted, cron-driven" system; Hermes already owns orchestration and nothing else in the design runs a daemon. A proxy adds a service to operate for benefits we must re-implement anyway — the ceiling has to **hard-stop the cron**, which is a decision the calling process makes, not a remote proxy |
+| B2 | Spend ledger is **JSONL, not SQLite** | T3 owns the database. A second writer from another ticket is how you get a locking bug at 16:15 on a weekday. `runs.token_cost` becomes `SpendLedger.total_for_run(run_id)` — an explicit handoff, not a shared table |
+| B3 | `model_requested` and `model_served` are **separate columns** | T14: "Fable's safeguards route some queries to Opus 5, and you want that visible rather than assumed." One field would make a reroute invisible — and it is billed at the other model's rate |
+| B4 | Budget exceeded **raises**; it does not downgrade | Degrading keeps spending money the operator said not to spend, and silently changes which model produced a verdict |
+| B5 | An unregistered agent is **refused**, not defaulted | Cheap silently downgrades a verdict agent; expensive silently multiplies the bill. Both defaults are wrong |
+| B6 | **litellm is pinned to its bundled price map** | See below |
+
+## Measured (litellm 1.97.0, 2026-08-20)
+
+| Quantity | Value |
+|---|---|
+| `import litellm` | 2.71 s → imported lazily |
+| cheap call, 6000/1200 tokens | $0.0120 |
+| expensive call, 6000/1200 | $0.0600 |
+| one 16-call committee run | **~$0.62** |
+| three workflows/day | **~$1.87** |
+| thirty days | **~$56** |
+| default ceiling $5.00/day | ~2.7× expected, 8 runs of headroom |
+
+**The token bill is roughly three times the $19/month FMP data subscription**
+that ADR 0001 spent a full audit round on. Recorded because the cost model in
+that ADR is about *data*, and data is the smaller number.
+
+## litellm fetches its price map over the network — pinned
+
+Default behaviour is to **fetch** the model-cost map at import, falling back to
+a bundled copy. Measured: first suite run 59.6 s, subsequent runs 5.8 s — the
+shape of a one-time remote fetch.
+
+Two problems, one of which is not about tests:
+
+1. the default suite was not hermetic, contrary to the stage A claim; and
+2. **a spend ceiling computed from prices fetched off the internet can move
+   between runs with no code change.**
+
+`LITELLM_LOCAL_MODEL_COST_MAP=True` is therefore set in `tests/conftest.py` and
+defaulted in `desk/llm.py`. Prices now travel with the litellm pin in
+`requirements.lock`, exactly like every other dependency here. The bundled map
+is smaller (2,982 entries vs 3,110), so a test asserts **our** two tier models
+are priced by it. Suite back to **5.25 s**.
+
+## Done criteria
+
+- [x] every LLM call appears in the spend log — asserted per call
+- [x] `runs.token_cost` handoff defined and tested (`total_for_run`)
+- [x] per-agent and per-model cost surfaced (`by_agent`, `by_model`)
+- [x] the responding model is logged, and a reroute is flagged
+- [x] daily ceiling hard-stops; mutation-tested
+- [x] Langfuse is a single integration point and strictly optional
+- [x] no network in the default suite — and now actually true

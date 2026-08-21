@@ -1,0 +1,33 @@
+# config/book.yaml — the half of the truth a broker export does not contain.
+#
+# §4.5: "A broker export contains what you hold. It does not contain why you
+# hold it or when you'd leave — no stops, no targets, no thesis. Those are
+# yours and they must survive re-import."
+#
+# Copy to config/book.yaml (git-ignored) and edit. An import NEVER writes any
+# field in this file.
+
+positions:
+  - ticker: NVDA
+    account: brokerage
+    stop: 150.00
+    target: 220.00
+    horizon: 2w+
+    thesis_run_id: null
+    exit_rules:
+      - kind: fixed_stop
+        threshold: 150.00
+      - kind: trailing_stop
+        threshold: 0.08
+        note: 8% off the high-water mark
+      - kind: take_profit
+        threshold: 220.00
+
+  - ticker: MU
+    account: brokerage
+    stop: 82.00
+    target: 130.00
+    horizon: 2w+
+
+  # A position with no entry here imports as UNMANAGED and the health report
+  # flags it as needing stops before it can be evaluated.

@@ -1,0 +1,41 @@
+# The Desk — example configuration. Copy to config/desk.yaml and edit.
+# config/desk.yaml is git-ignored; this example is tracked.
+
+llm:
+  # DESK_DESIGN §5: "Use the cheap model for analysts, the expensive one only
+  # for debate, research manager, and verdict."
+  tiers:
+    cheap: claude-haiku-4-5-20251001
+    expensive: claude-opus-5
+
+  # Daily hard stop. Exceeding it raises BudgetExceeded and stops the cron —
+  # it does NOT silently downgrade to a cheaper model, which would keep
+  # spending money you said not to spend and change which model produced a
+  # verdict.
+  #
+  # Measured 2026-08-20 at litellm 1.97.0 prices, 6000 prompt / 1200
+  # completion tokens per call:
+  #     one cheap call            $0.0120
+  #     one expensive call        $0.0600
+  #     one 16-call committee run ~$0.62
+  #     three workflows a day     ~$1.87
+  #     thirty days               ~$56
+  # So $5.00/day is roughly 2.7x expected daily spend, or 8 committee runs.
+  #
+  # Worth knowing: at ~$56/month the token bill is about THREE TIMES the
+  # $19/month FMP data subscription (T18).
+  daily_ceiling_usd: 5.00
+
+  # The ceiling is checked BEFORE each call. Cost is only knowable after, so
+  # the final call of the day can overshoot by at most one call's cost. It
+  # cannot overshoot repeatedly.
+
+data:
+  cache_dir: .cache
+  # FRED needs no API key — measured: fredgraph.csv returns DGS10 from 1962
+  # over HTTP 200, while the documented API 400s without one. Set FRED_API_KEY
+  # only if you want the official endpoint.
+  #
+  # FMP is the fallback for annual fundamentals and estimates. It is UNVERIFIED
+  # until T18 buys a key; without FMP_API_KEY the fallback seam exists but
+  # cannot answer.

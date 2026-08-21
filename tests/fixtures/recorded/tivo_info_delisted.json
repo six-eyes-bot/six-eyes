@@ -1,0 +1,13 @@
+{
+ "cryptoTradeable": false,
+ "customPriceAlertConfidence": "NONE",
+ "esgPopulated": false,
+ "hasPrePostMarketData": false,
+ "language": "en-US",
+ "quoteType": "NONE",
+ "region": "US",
+ "symbol": "TIVO",
+ "tradeable": false,
+ "trailingPegRatio": null,
+ "triggerable": false
+}

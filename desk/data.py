@@ -12,10 +12,16 @@ Each is a measured failure, not a hypothetical:
 
   (a) Historical series -> minimum-row-count assertion. A short series must
       RAISE, not return.
-      Measured 2026-08-18: yfinance ^TNX returns 17 bars for period="2y" and
+      Measured 2026-08-18: yfinance ^TNX returned 17 bars for period="2y" and
       16 for an explicit two-year start/end, but 1,254 for period="5y".
       No exception, no warning. A macro analyst would compute "UST 10Y y/y"
       from three weeks of data and report it with full confidence.
+      RE-MEASURED 2026-08-20 under yfinance 1.6.0: ^TNX now returns 502 bars
+      for period="2y". That specific reproduction is GONE. The guard stays --
+      the failure class is real and was observed in this system's own
+      dependency, and a row-count floor costs one comparison. Separately, T2
+      no longer routes UST 10Y through ^TNX at all: FRED's DGS10 serves it,
+      keylessly (measured 2026-08-20).
 
   (b) `.info` scalars (ATM IV, shortPercentOfFloat, shortRatio) -> per-FIELD
       schema assertion. The failure mode here is a MISSING KEY, not a short
@@ -41,13 +47,25 @@ without the date in the signature that cache cannot be written.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+import logging
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import date
-from typing import TYPE_CHECKING, Generic, Protocol, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, Protocol, TypeVar
+
+from desk.cache import TTLCache
+from desk.providers.base import (
+    DataQualityError,
+    Provider,
+    ProviderUnavailable,
+    TickerNotLive,
+    reject_lookahead,
+)
 
 if TYPE_CHECKING:  # pragma: no cover - typing only, keeps import cost off the hot path
     from pandas import DataFrame, Series
+
+log = logging.getLogger(__name__)
 
 T = TypeVar("T")
 
@@ -66,6 +84,11 @@ class Sourced(Generic[T]):
     #: T2 MUST log every degraded read — silent fallback is the thing this
     #: whole interface exists to prevent.
     degraded: bool = False
+    #: True when this came from the TTL cache. Orthogonal to `source`, which
+    #: always names the PROVIDER that originally answered — a cached read is
+    #: still yfinance data, and reporting source="cache" would throw away the
+    #: provenance this type exists to carry.
+    cached: bool = False
 
 
 class MarketData(Protocol):
@@ -123,18 +146,214 @@ class MarketData(Protocol):
         ...
 
 
-class _Unimplemented:
-    """Not a usable backend — it exists so mypy has a conformance check to fail.
 
-    `Protocol` is structural, so nothing verifies the interface until some
-    module asserts it. T1 ships no real consumer, so without this the Protocol
-    would be unenforced prose and could drift freely until T2.
+
+# ==========================================================================
+# The implementation (T2)
+# ==========================================================================
+
+#: Ordered provider chain per method. THIS TABLE IS THE TICKET.
+#:
+#: It is not decoration and it is not uniform, because the ADR measured that
+#: the real fallback matrix is not uniform:
+#:
+#:   * FMP **Starter** ($19/mo) sells ANNUAL fundamentals. Quarterly statements
+#:     are Premium ($49), so `rev Q/Q` has no licensed fallback at our tier.
+#:   * NOTHING measured under $3,500/month sells options-chain IV or short
+#:     interest, so `option_chain` has no fallback at any price we would pay.
+#:   * The screener has one source.
+#:
+#: A chain of length one means: on failure, RAISE. Wrapping every method in a
+#: generic try-primary-else-secondary would manufacture exactly the silent
+#: failure this whole interface exists to prevent — it would report a number
+#: from somewhere as though it came from the right place.
+FALLBACK_POLICY: dict[str, tuple[str, ...]] = {
+    "is_live": ("yfinance",),
+    "daily_bars": ("yfinance",),
+    "quote_scalars": ("yfinance",),
+    "quarterly_income": ("yfinance",),          # rev Q/Q -- Premium-only elsewhere
+    "annual_fundamentals": ("yfinance", "fmp"),
+    "estimates": ("yfinance", "fmp"),
+    "option_chain": ("yfinance",),              # no source under $3,500/mo
+    "macro_series": ("fred", "yfinance"),
+    "screen": ("finviz",),
+}
+
+#: Methods scoped to a single company, and therefore gated on guard (c).
+#: `macro_series` and `screen` are not — a macro series has no ticker, and the
+#: screener's whole job is to discover them.
+_TICKER_SCOPED = frozenset(
+    {
+        "daily_bars",
+        "quote_scalars",
+        "quarterly_income",
+        "annual_fundamentals",
+        "estimates",
+        "option_chain",
+    }
+)
+
+
+class MarketDataService:
+    """Composes providers into the `MarketData` Protocol.
+
+    Owns the three decisions no single provider can make: which chain serves a
+    method, whether a ticker is worth asking about at all, and what may be
+    cached.
     """
 
-    def __getattr__(self, name: str) -> object:  # pragma: no cover
-        raise NotImplementedError(f"MarketData.{name} lands in T2, not T1")
+    def __init__(
+        self,
+        providers: Sequence[Provider],
+        cache: TTLCache | None = None,
+        today: Callable[[], date] | None = None,
+        policy: Mapping[str, tuple[str, ...]] | None = None,
+    ) -> None:
+        self._by_name = {p.name: p for p in providers}
+        self._cache = cache
+        self._today = today or date.today
+        self._policy = dict(policy or FALLBACK_POLICY)
+        self._liveness: dict[tuple[str, date], bool] = {}
+
+    # ------------------------------------------------------------- plumbing
+    def _chain(self, method: str) -> list[Provider]:
+        names = self._policy.get(method, ())
+        chain = [self._by_name[n] for n in names if n in self._by_name]
+        if not chain:
+            raise ProviderUnavailable(
+                f"no provider configured for {method}; policy wants {list(names)}, "
+                f"registered are {sorted(self._by_name)}"
+            )
+        return [p for p in chain if method in p.CAPABILITIES]
+
+    def _attempt(
+        self, method: str, cache_key: tuple[str, str] | None, as_of: date, *args: object
+    ) -> Sourced[Any]:
+        """Walk the chain. First success wins; a second-place win is degraded."""
+        chain = self._chain(method)
+        if not chain:
+            raise ProviderUnavailable(f"no provider declares the capability {method!r}")
+
+        if cache_key is not None and self._cache is not None:
+            entry = self._cache.get_entry(cache_key[0], cache_key[1], as_of)
+            if entry is not None:
+                value, meta = entry
+                return Sourced(
+                    value=value,
+                    source=str(meta.get("source", "unknown")),
+                    as_of=as_of,
+                    degraded=False,
+                    cached=True,
+                )
+
+        first_error: Exception | None = None
+        for index, provider in enumerate(chain):
+            try:
+                value = getattr(provider, method)(*args)
+            except TickerNotLive:
+                # Not fallback-eligible: asking a second provider the same
+                # meaningless question about a delisted symbol wastes a call
+                # and risks dressing up an empty answer as a real one.
+                raise
+            except (ProviderUnavailable, DataQualityError) as exc:
+                if first_error is None:
+                    first_error = exc
+                log.warning(
+                    "provider %s failed %s (%s: %s)%s",
+                    provider.name, method, type(exc).__name__, exc,
+                    "" if index + 1 < len(chain) else " — no fallback remains",
+                )
+                continue
+
+            degraded = index > 0
+            if degraded:
+                log.warning(
+                    "DEGRADED READ: %s served by fallback %r after %r failed. "
+                    "Value is real but its provenance is not the primary.",
+                    method, provider.name, chain[0].name,
+                )
+            # Only clean primary reads are cached. Caching a degraded answer
+            # would make one transient upstream failure sticky for a whole TTL.
+            if cache_key is not None and self._cache is not None and not degraded:
+                self._cache.set(
+                    cache_key[0], cache_key[1], as_of, value,
+                    meta={"source": provider.name},
+                )
+            return Sourced(value=value, source=provider.name, as_of=as_of, degraded=degraded)
+
+        # Every provider failed. Raise the FIRST error: it describes the
+        # primary, which is the one whose failure actually matters.
+        assert first_error is not None
+        raise first_error
+
+    def _guard_live(self, ticker: str, as_of: date) -> None:
+        """Guard (c). Resolved once per (ticker, as_of); `is_live` itself does
+        not re-enter this, which would be infinite."""
+        key = (ticker, as_of)
+        if key not in self._liveness:
+            self._liveness[key] = self.is_live(ticker, as_of).value
+        if not self._liveness[key]:
+            raise TickerNotLive(
+                f"{ticker} is not quoting as of {as_of}. Measured: delisted "
+                "tickers return every field missing with no exception raised. "
+                "TIVO and GIV, two of the five positions in DESK_DESIGN's own "
+                "example book, are delisted today."
+            )
+
+    def _preflight(self, as_of: date, ticker: str | None = None) -> None:
+        reject_lookahead(as_of, self._today())
+        if ticker is not None:
+            self._guard_live(ticker, as_of)
+
+    # -------------------------------------------------------------- methods
+    def is_live(self, ticker: str, as_of: date) -> Sourced[bool]:
+        reject_lookahead(as_of, self._today())
+        return self._attempt("is_live", ("is_live", ticker), as_of, ticker, as_of)
+
+    def daily_bars(self, ticker: str, start: date, end: date) -> Sourced[DataFrame]:
+        self._preflight(end, ticker)
+        key = (f"daily_bars:{start.isoformat()}:{end.isoformat()}", ticker)
+        return self._attempt("daily_bars", key, end, ticker, start, end)
+
+    def quote_scalars(
+        self, ticker: str, fields: Sequence[str], as_of: date
+    ) -> Sourced[Mapping[str, float]]:
+        self._preflight(as_of, ticker)
+        key = (f"quote_scalars:{','.join(sorted(fields))}", ticker)
+        return self._attempt("quote_scalars", key, as_of, ticker, fields, as_of)
+
+    def quarterly_income(self, ticker: str, as_of: date) -> Sourced[DataFrame]:
+        self._preflight(as_of, ticker)
+        return self._attempt("quarterly_income", ("quarterly_income", ticker), as_of, ticker, as_of)
+
+    def annual_fundamentals(self, ticker: str, as_of: date) -> Sourced[Mapping[str, float]]:
+        self._preflight(as_of, ticker)
+        return self._attempt(
+            "annual_fundamentals", ("annual_fundamentals", ticker), as_of, ticker, as_of
+        )
+
+    def estimates(self, ticker: str, as_of: date) -> Sourced[Mapping[str, float]]:
+        self._preflight(as_of, ticker)
+        return self._attempt("estimates", ("estimates", ticker), as_of, ticker, as_of)
+
+    def option_chain(
+        self, ticker: str, expiry: date | None, as_of: date
+    ) -> Sourced[DataFrame]:
+        self._preflight(as_of, ticker)
+        key = (f"option_chain:{expiry.isoformat() if expiry else 'front'}", ticker)
+        return self._attempt("option_chain", key, as_of, ticker, expiry, as_of)
+
+    def macro_series(self, series_id: str, start: date, end: date) -> Sourced[Series]:
+        self._preflight(end)
+        key = (f"macro_series:{start.isoformat()}:{end.isoformat()}", series_id)
+        return self._attempt("macro_series", key, end, series_id, start, end)
+
+    def screen(self, filters: Mapping[str, str], as_of: date) -> Sourced[DataFrame]:
+        self._preflight(as_of)
+        key = ("screen", ",".join(f"{k}={v}" for k, v in sorted(filters.items())))
+        return self._attempt("screen", key, as_of, filters, as_of)
 
 
 if TYPE_CHECKING:  # pragma: no cover
-    # mypy fails here the moment the Protocol and this stub disagree.
-    _conformance: MarketData = _Unimplemented()  # type: ignore[assignment]
+    # mypy fails here the moment the implementation and the Protocol disagree.
+    _conformance: MarketData = MarketDataService(providers=[])

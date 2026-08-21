@@ -269,3 +269,14 @@ module = [
     # END vendored
 ]
 ignore_errors = true
+
+# T2 imports these two, and only these two. `financetoolkit` is deliberately
+# absent: nothing imports it yet, and `warn_unused_configs` correctly flags a
+# pre-declared exemption for an import that does not exist.
+#
+# The list is INLINE on one line on purpose. `make tooling-config` rewrites the
+# first multi-line `module = [` block it finds (the vendored-engine one above);
+# a second multi-line block here would be ambiguous to that regex.
+[[tool.mypy.overrides]]
+module = ["yfinance.*", "finvizfinance.*"]
+ignore_missing_imports = true

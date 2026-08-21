@@ -30,6 +30,7 @@ dev = [
     "ruff>=0.6",
     "mypy>=1.11",
     "pandas-stubs",
+    "types-PyYAML",   # PyYAML ships no py.typed; stubs, not an exemption
     "pip-tools>=7",
 ]
 

@@ -4,7 +4,7 @@
 
 This file exists so the drift is greppable. **Where the two disagree, the ADR wins.**
 
-*Last reconciled: 2026-08-18 against `main` @ 90f399b.*
+*Last reconciled: 2026-08-21 against `main` @ ef220f5.*
 
 ---
 
@@ -24,6 +24,22 @@ This file exists so the drift is greppable. **Where the two disagree, the ADR wi
 | **TICKETS T9** — "add a fixed seed" / "replace its yfinance calls" | Neither applies to the substitute: `dafahentra`'s engine takes an injected `rng` and has no data-layer coupling | measured |
 | **TICKETS T1** — implies `pip install tradingagents` | **Install from git at a pinned SHA.** The PyPI name resolves to `Mai0313/tradingagents` v0.7.0 MIT, not upstream v0.3.1 Apache-2.0 | supply chain |
 | **TICKETS T13** — LangGraph checkpoint resume treated as automatic | It is **opt-in via `--checkpoint`**. The cron entrypoint must pass the flag. | verified in upstream README |
+
+## Gaps WITHIN the frozen docs — §4 and §4.5 disagree with each other (T3)
+
+These are not ADR overrides. They are places where DESK_DESIGN contradicts
+itself, found while implementing T3. Resolved in `desk/db.py`, recorded here.
+
+| # | Gap | Resolution |
+|---|---|---|
+| G1 | §4.5 reconciles on **`(ticker, account)`**, but §4's `positions(...)` has **no `account` column** | Added `account NOT NULL DEFAULT ''` with `UNIQUE (ticker, account)`. Without it the matching key cannot be expressed and the same ticker in two accounts collapses into one row — asserted by a test |
+| G2 | §4.5 says stamp **`book.last_import_at`**; §4 defines no `book` table | Added `book_meta(key, value)`. `days_stale()` reads it for W1's staleness refusal (default 3 days) |
+| G3 | `positions.status` values are never enumerated; §4.5 only uses `UNMANAGED` and `CLOSED` | `status ∈ {OPEN, UNMANAGED, CLOSED}` with a CHECK constraint. **OPEN** = imported *and* covered by `config/book.yaml`, i.e. it has the stops the exit-rule engine needs |
+
+Also settled by T3: `runs.token_cost` (§4) is **one row per run with one model
+column**, which cannot hold the per-agent, per-model cost of a ~16-call
+committee. T2's per-call spend ledger lives outside this database and
+`runs.token_cost == SpendLedger.total_for_run(run_id)`.
 
 ## Added, with no ticket that owns them
 

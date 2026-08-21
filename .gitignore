@@ -76,3 +76,8 @@ htmlcov/
 .idea/
 .vscode/
 .cache/
+
+# T3 artefacts
+desk.db
+desk.db-wal
+desk.db-shm

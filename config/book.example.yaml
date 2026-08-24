@@ -14,14 +14,33 @@ positions:
     target: 220.00
     horizon: 2w+
     thesis_run_id: null
+    # `stop` and `target` above ARE the fixed-stop and take-profit rules —
+    # the shorthand for the two every position has. Do not also list them
+    # here; that produces two identical rules for one condition.
+    #
+    # `unit` is EXPLICIT (T4). It is never inferred from magnitude — a $0.40
+    # stop on a $0.50 stock must not be read as 40%. Omitting it takes the
+    # documented default for that kind; a wrong combination is refused.
     exit_rules:
-      - kind: fixed_stop
-        threshold: 150.00
       - kind: trailing_stop
-        threshold: 0.08
+        threshold: 0.08          # a FRACTION. 8 would be refused, not read as 800%.
+        unit: pct
         note: 8% off the high-water mark
-      - kind: take_profit
-        threshold: 220.00
+      - kind: time_stop
+        threshold: 90
+        unit: days
+        armed: false             # disarmed; arm it to exit after 90 days held
+      # DESK_DESIGN §5 calls this an ALERT, not an exit: it warns, never sells.
+      - kind: earnings_proximity
+        threshold: 7
+        unit: days
+
+    # Sourced by hand today. A provider-backed earnings date would need a new
+    # method on the MarketData Protocol, which T2 does not ship.
+    next_earnings: 2026-11-19
+    # Set true when the reason for holding is gone. Fires an exit LAST in
+    # precedence, so a price stop is still reported as the price stop.
+    thesis_invalidated: false
 
   - ticker: MU
     account: brokerage

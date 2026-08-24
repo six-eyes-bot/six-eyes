@@ -45,6 +45,7 @@ def pos(
     opened_at: date | None = None,
     high_water_mark: float | None = None,
     thesis_invalidated: bool = False,
+    next_earnings: date | None = None,
 ) -> PositionState:
     return PositionState(
         ticker=ticker,
@@ -55,6 +56,7 @@ def pos(
         opened_at=opened_at,
         high_water_mark=high_water_mark,
         thesis_invalidated=thesis_invalidated,
+        next_earnings=next_earnings,
     )
 
 
@@ -373,3 +375,73 @@ def test_two_rules_of_the_same_kind_report_one_trigger() -> None:
     assert got.action == EXIT
     assert got.triggered is not None and got.triggered.reason == "fixed_stop"
     assert got.also_fired == (), "the same kind must not be counted twice"
+
+
+# ======================================================================
+# Earnings proximity — an ALERT, never an exit (T5, DESK_DESIGN §5 Phase 2)
+# ======================================================================
+def test_earnings_proximity_alerts_without_exiting() -> None:
+    """§5 Phase 2 calls it an "earnings-proximity alert". Auto-exiting before
+    every earnings date would quietly close half the book four times a year."""
+    state = pos(100.0, next_earnings=TODAY + timedelta(days=3))
+    got = evaluate(state, [Rule(RuleKind.EARNINGS_PROXIMITY, 7, Unit.DAYS)])
+    assert got.action == HOLD, "an alert must never cause an exit"
+    assert [a.reason for a in got.alerts] == ["earnings_proximity"]
+    assert "earnings in 3d" in got.alerts[0].detail
+
+
+def test_earnings_alert_is_silent_outside_the_window() -> None:
+    state = pos(100.0, next_earnings=TODAY + timedelta(days=30))
+    assert evaluate(state, [Rule(RuleKind.EARNINGS_PROXIMITY, 7, Unit.DAYS)]).alerts == ()
+
+
+def test_earnings_alert_boundary_is_inclusive() -> None:
+    state = pos(100.0, next_earnings=TODAY + timedelta(days=7))
+    assert len(evaluate(state, [Rule(RuleKind.EARNINGS_PROXIMITY, 7, Unit.DAYS)]).alerts) == 1
+
+
+def test_past_earnings_date_does_not_alert() -> None:
+    """Already reported is not proximity — otherwise a stale date in
+    book.yaml alerts forever."""
+    state = pos(100.0, next_earnings=TODAY - timedelta(days=1))
+    assert evaluate(state, [Rule(RuleKind.EARNINGS_PROXIMITY, 7, Unit.DAYS)]).alerts == ()
+
+
+def test_no_earnings_date_does_not_alert() -> None:
+    assert evaluate(pos(100.0), [Rule(RuleKind.EARNINGS_PROXIMITY, 7, Unit.DAYS)]).alerts == ()
+
+
+def test_earnings_alert_rides_alongside_an_exit() -> None:
+    """Alerts are evaluated independently of PRECEDENCE, so an exit does not
+    suppress the warning — and the warning does not become the exit reason."""
+    state = pos(85.0, next_earnings=TODAY + timedelta(days=2))
+    got = evaluate(state, [
+        Rule(RuleKind.FIXED_STOP, 0.10, Unit.PCT),
+        Rule(RuleKind.EARNINGS_PROXIMITY, 7, Unit.DAYS),
+    ])
+    assert got.action == EXIT
+    assert got.triggered is not None and got.triggered.reason == "fixed_stop"
+    assert [a.reason for a in got.alerts] == ["earnings_proximity"]
+    assert got.also_fired == (), "an alert is not a losing exit rule"
+
+
+def test_earnings_proximity_is_not_in_the_exit_precedence() -> None:
+    from desk.exit_rules import ALERT_ONLY
+
+    assert RuleKind.EARNINGS_PROXIMITY not in PRECEDENCE
+    assert RuleKind.EARNINGS_PROXIMITY in ALERT_ONLY
+
+
+def test_earnings_proximity_must_be_in_days() -> None:
+    with pytest.raises(RuleConfigError, match="cannot be expressed"):
+        Rule(RuleKind.EARNINGS_PROXIMITY, 0.5, Unit.PCT)
+
+
+def test_two_earnings_rules_alert_once() -> None:
+    """Same break semantics as the exit path."""
+    state = pos(100.0, next_earnings=TODAY + timedelta(days=2))
+    got = evaluate(state, [
+        Rule(RuleKind.EARNINGS_PROXIMITY, 7, Unit.DAYS),
+        Rule(RuleKind.EARNINGS_PROXIMITY, 14, Unit.DAYS),
+    ])
+    assert len(got.alerts) == 1

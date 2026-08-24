@@ -41,6 +41,9 @@ class RuleKind(StrEnum):
     #: The two rules upstream lacks (T4).
     TIME_STOP = "time_stop"
     THESIS_INVALIDATION = "thesis_invalidation"
+    #: T5. DESK_DESIGN §5 Phase 2 calls this an "earnings-proximity ALERT",
+    #: not an exit -- so it never triggers one. See ALERT_ONLY below.
+    EARNINGS_PROXIMITY = "earnings_proximity"
 
 
 class Unit(StrEnum):
@@ -78,7 +81,18 @@ VALID_UNITS: dict[RuleKind, frozenset[Unit]] = {
     RuleKind.TAKE_PROFIT: frozenset({Unit.PRICE, Unit.PCT}),
     RuleKind.TIME_STOP: frozenset({Unit.DAYS}),
     RuleKind.THESIS_INVALIDATION: frozenset({Unit.FLAG}),
+    RuleKind.EARNINGS_PROXIMITY: frozenset({Unit.DAYS}),
 }
+
+#: Rules that raise a WARNING and never an exit.
+#:
+#: DESK_DESIGN §5 Phase 2 lists "earnings-proximity alert" alongside the exit
+#: rules, but the word is *alert*. Earnings approaching is a reason to look,
+#: not a reason to sell -- and auto-exiting before every earnings date would
+#: quietly close half the book four times a year. Alerts are evaluated
+#: independently of PRECEDENCE, because they are not competing to decide an
+#: exit.
+ALERT_ONLY: frozenset[RuleKind] = frozenset({RuleKind.EARNINGS_PROXIMITY})
 
 DEFAULT_UNITS: dict[RuleKind, Unit] = {
     RuleKind.FIXED_STOP: Unit.PRICE,
@@ -86,6 +100,7 @@ DEFAULT_UNITS: dict[RuleKind, Unit] = {
     RuleKind.TAKE_PROFIT: Unit.PRICE,
     RuleKind.TIME_STOP: Unit.DAYS,
     RuleKind.THESIS_INVALIDATION: Unit.FLAG,
+    RuleKind.EARNINGS_PROXIMITY: Unit.DAYS,
 }
 
 
@@ -157,6 +172,7 @@ class PositionState:
     opened_at: date | None = None
     high_water_mark: float | None = None
     thesis_invalidated: bool = False
+    next_earnings: date | None = None
     account: str = ""
 
     def __post_init__(self) -> None:
@@ -197,6 +213,10 @@ class Decision:
     action: str
     triggered: Trigger | None = None
     also_fired: tuple[Trigger, ...] = field(default_factory=tuple)
+    #: Warnings that do NOT cause an exit. Kept separate from `also_fired`,
+    #: which holds exit rules that lost on precedence — conflating "this would
+    #: have exited too" with "look at this" would misreport both.
+    alerts: tuple[Trigger, ...] = field(default_factory=tuple)
 
     @property
     def exited(self) -> bool:
@@ -256,6 +276,20 @@ def _time_stop(state: PositionState, rule: Rule) -> Trigger | None:
     return None
 
 
+def _earnings_proximity(state: PositionState, rule: Rule) -> Trigger | None:
+    """ALERT only. Earnings approaching is a reason to look, not to sell."""
+    assert rule.threshold is not None
+    if state.next_earnings is None:
+        return None
+    days_away = (state.next_earnings - state.as_of).days
+    if days_away < 0:
+        return None   # already reported; not proximity
+    if days_away <= rule.threshold:
+        return Trigger(rule.kind, "earnings_proximity",
+                       f"earnings in {days_away}d (within {rule.threshold:g}d)")
+    return None
+
+
 def _thesis_invalidation(state: PositionState, rule: Rule) -> Trigger | None:
     if state.thesis_invalidated:
         return Trigger(rule.kind, "thesis_invalidation",
@@ -269,6 +303,7 @@ _PREDICATES = {
     RuleKind.TAKE_PROFIT: _take_profit,
     RuleKind.TIME_STOP: _time_stop,
     RuleKind.THESIS_INVALIDATION: _thesis_invalidation,
+    RuleKind.EARNINGS_PROXIMITY: _earnings_proximity,
 }
 
 
@@ -279,6 +314,16 @@ def evaluate(state: PositionState, rules: list[Rule]) -> Decision:
     for rule in rules:
         if rule.armed:
             by_kind.setdefault(rule.kind, []).append(rule)
+
+    alerts: list[Trigger] = []
+    for kind, rules_of_kind in by_kind.items():
+        if kind not in ALERT_ONLY:
+            continue
+        for rule in rules_of_kind:
+            hit = _PREDICATES[kind](state, rule)
+            if hit is not None:
+                alerts.append(hit)
+                break
 
     for kind in PRECEDENCE:
         for rule in by_kind.get(kind, []):
@@ -292,9 +337,10 @@ def evaluate(state: PositionState, rules: list[Rule]) -> Decision:
                 break
 
     if not fired:
-        return Decision(ticker=state.ticker, action=HOLD)
+        return Decision(ticker=state.ticker, action=HOLD, alerts=tuple(alerts))
     return Decision(
-        ticker=state.ticker, action=EXIT, triggered=fired[0], also_fired=tuple(fired[1:])
+        ticker=state.ticker, action=EXIT, triggered=fired[0],
+        also_fired=tuple(fired[1:]), alerts=tuple(alerts),
     )
 
 

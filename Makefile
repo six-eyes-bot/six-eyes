@@ -9,7 +9,7 @@ BIN      = $(VENV)/bin
 
 .DEFAULT_GOAL := help
 
-.PHONY: help setup lock test lint type unit clean vendor-engine vendor-manifest tooling-config
+.PHONY: help setup lock test lint type unit cover clean vendor-engine vendor-manifest tooling-config
 
 help:
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  %-16s %s\n", $$1, $$2}'
@@ -52,7 +52,11 @@ type: ## mypy
 unit: ## pytest
 	$(BIN)/pytest -q
 
-test: lint type unit ## lint + type + unit, in that order
+cover: ## T4 Done criterion: 100% BRANCH coverage of the exit-rule engine
+	$(BIN)/pytest tests/test_exit_rules.py -q --cov=desk.exit_rules \
+		--cov-branch --cov-report=term-missing --cov-fail-under=100
+
+test: lint type unit cover ## lint + type + unit + coverage gate, in that order
 	@echo "make test: all green"
 
 clean:

@@ -1,0 +1,6 @@
+ticker,qty,cost_basis,market_value,account
+NVDA,100,15000.00,19100.00,brokerage
+MU,200,18400.00,21200.00,brokerage
+GOOG,50,8200.00,9450.00,brokerage
+TIVO,300,900.00,930.00,brokerage
+GIV,150,1800.00,1860.00,brokerage

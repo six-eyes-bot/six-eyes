@@ -1,0 +1,7 @@
+# Five managed positions, every stop below spot and every target above it.
+positions:
+  - {ticker: NVDA, account: brokerage, stop: 150.00, target: 260.00}
+  - {ticker: MU,   account: brokerage, stop:  82.00, target: 140.00}
+  - {ticker: GOOG, account: brokerage, stop: 150.00, target: 230.00}
+  - {ticker: TIVO, account: brokerage, stop:   2.50, target:   4.50}
+  - {ticker: GIV,  account: brokerage, stop:  10.00, target:  16.00}

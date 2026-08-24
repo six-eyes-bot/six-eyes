@@ -333,7 +333,13 @@ def test_example_book_parses() -> None:
     assert ("NVDA", "brokerage") in book
     nvda = book[("NVDA", "brokerage")]
     assert nvda.stop == 150.0 and nvda.target == 220.0
-    assert {r.kind for r in nvda.exit_rules} == {"fixed_stop", "trailing_stop", "take_profit"}
+    # `stop` and `target` ARE the fixed-stop and take-profit rules; exit_rules
+    # carries only the kinds that have no shorthand. T5 removed the duplicate
+    # fixed_stop/take_profit entries this used to assert.
+    assert {r.kind for r in nvda.exit_rules} == {
+        "trailing_stop", "time_stop", "earnings_proximity",
+    }
+    assert all(r.unit is not None for r in nvda.exit_rules), "units must be explicit"
 
 
 def test_absent_book_is_legitimate(tmp_path: Path) -> None:

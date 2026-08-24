@@ -27,6 +27,7 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=8",
+    "pytest-cov>=5",   # T4 Done criterion: 100% BRANCH coverage of exit_rules
     "ruff>=0.6",
     "mypy>=1.11",
     "pandas-stubs",

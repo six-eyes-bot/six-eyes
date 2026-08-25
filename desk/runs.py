@@ -14,21 +14,27 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from datetime import UTC, datetime
 from typing import Any
 
 from desk.spend import SpendLedger
 from desk.verdict import Verdict
 
+#: Guards cursor interleaving when parallel graph nodes persist at once.
+#: See desk/db.py::connect for why more than one thread reaches this module.
+_WRITE_LOCK = threading.Lock()
+
 
 def start_run(
     conn: sqlite3.Connection, workflow: str, ticker: str | None = None
 ) -> str:
-    cursor = conn.execute(
-        "INSERT INTO runs(workflow, ticker, started_at, status) VALUES(?,?,?,'RUNNING')",
-        (workflow, ticker, datetime.now(UTC).isoformat()),
-    )
-    conn.commit()
+    with _WRITE_LOCK:
+        cursor = conn.execute(
+            "INSERT INTO runs(workflow, ticker, started_at, status) VALUES(?,?,?,'RUNNING')",
+            (workflow, ticker, datetime.now(UTC).isoformat()),
+        )
+        conn.commit()
     return str(cursor.lastrowid)
 
 
@@ -45,21 +51,24 @@ def record_agent_output(
     debugging why the verdict was wrong — so it is persisted with its grade,
     not dropped.
     """
-    conn.execute(
-        "INSERT INTO agent_outputs(run_id, agent, payload_json, latency_ms) VALUES(?,?,?,?)",
-        (int(run_id), agent, json.dumps(payload, default=str), latency_ms),
-    )
-    conn.commit()
+    with _WRITE_LOCK:
+        conn.execute(
+            "INSERT INTO agent_outputs(run_id, agent, payload_json, latency_ms) "
+            "VALUES(?,?,?,?)",
+            (int(run_id), agent, json.dumps(payload, default=str), latency_ms),
+        )
+        conn.commit()
 
 
 def record_verdict(conn: sqlite3.Connection, run_id: str, verdict: Verdict) -> None:
-    conn.execute(
-        "INSERT INTO verdicts(run_id, action, price_low, price_high, conviction, rationale) "
-        "VALUES(?,?,?,?,?,?)",
-        (int(run_id), verdict.action.value, verdict.price_low, verdict.price_high,
-         verdict.conviction, verdict.rationale),
-    )
-    conn.commit()
+    with _WRITE_LOCK:
+        conn.execute(
+            "INSERT INTO verdicts(run_id, action, price_low, price_high, conviction, "
+            "rationale) VALUES(?,?,?,?,?,?)",
+            (int(run_id), verdict.action.value, verdict.price_low, verdict.price_high,
+             verdict.conviction, verdict.rationale),
+        )
+        conn.commit()
 
 
 def finish_run(
@@ -71,9 +80,11 @@ def finish_run(
 ) -> float:
     """Close the run and stamp its cost from the T2 ledger."""
     cost = ledger.total_for_run(run_id)
-    conn.execute(
-        "UPDATE runs SET finished_at = ?, status = ?, token_cost = ?, model = ? WHERE id = ?",
-        (datetime.now(UTC).isoformat(), status, cost, model, int(run_id)),
-    )
-    conn.commit()
+    with _WRITE_LOCK:
+        conn.execute(
+            "UPDATE runs SET finished_at = ?, status = ?, token_cost = ?, model = ? "
+            "WHERE id = ?",
+            (datetime.now(UTC).isoformat(), status, cost, model, int(run_id)),
+        )
+        conn.commit()
     return cost

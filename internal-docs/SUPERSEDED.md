@@ -4,7 +4,7 @@
 
 This file exists so the drift is greppable. **Where the two disagree, the ADR wins.**
 
-*Last reconciled: 2026-08-21 against `main` @ ebf79bc.*
+*Last reconciled: 2026-08-21 against `main` @ f10a839.*
 
 ---
 
@@ -77,7 +77,7 @@ Macro has tools, neither has a node.
 
 | Item | Status |
 |---|---|
-| **Repointing `engine/dataflows/` at `desk/data.py`.** The ADR drops both OpenBB and Finnhub; frozen §3 assigned the engine's primary source to `openbb_mcp.py`, which will not exist. Upstream does ship `alpha_vantage`, `y_finance` and `fred` dataflows, so the engine is **not** dataless — but nothing assigns the repointing work. | **UNASSIGNED.** Not T1. Decide before T6. |
+| ~~**Repointing `engine/dataflows/` at `desk/data.py`**~~ — **RESOLVED in T7.** `desk/data.py` serves six of the seven analysts (technical, fundamentals, estimates, flow/ownership, options, macro). News/sentiment uses the engine's own `yfinance_news` dataflow, because the MarketData Protocol has no news method and adding one is a T2 change. **Measured: that dataflow needs no API key.** Both paths are yfinance underneath — one provider reached two ways, not two providers, which is why this is acceptable rather than merely tolerated. The engine's five vendored analysts are **not used** by the committee graph at all. |
 | **A quality-gate node** between the analysts and the bull/bear debate — grade each analyst report, reject empty/short ones and LLM-failure markers ("I cannot retrieve", "unable to fetch"). Pattern read from `simonlin1212/TradingAgents-astock` (Apache-2.0); ~40 lines against our schema. | Folded into **T7**. Attribute if code is lifted. |
 | **T8 must annualise Sharpe explicitly** and assert the convention in a test. `financetoolkit.get_sharpe_ratio` is per-period; `empyrical`/`quantstats` annualise. 15.88× apart under an identical name. | **T8** |
 | **`rev Q/Q` is single-sourced on yfinance** at the $19 FMP tier (Starter is *annual* fundamentals). A licensed fallback for it costs $49. | Accepted caveat. Revisit at T18. |

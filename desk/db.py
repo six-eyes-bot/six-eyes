@@ -151,12 +151,20 @@ CREATE INDEX IF NOT EXISTS idx_outputs_run     ON agent_outputs(run_id);
 
 
 def connect(path: Path | str) -> sqlite3.Connection:
-    """Open with foreign keys ON.
+    """Open with foreign keys ON, usable from more than one thread.
 
     SQLite disables foreign keys by DEFAULT, per connection. A schema full of
     REFERENCES clauses that are never enforced looks exactly like one that is.
+
+    `check_same_thread=False` is REQUIRED, not a convenience: LangGraph fans
+    the seven analysts out across a thread pool, and every one of them
+    persists its output. Without this the first real committee run dies with
+    "SQLite objects created in a thread can only be used in that same thread"
+    — which is exactly how T7 found out. Writes are serialised by the lock in
+    desk/runs.py; sqlite3 itself is compiled serialised, so the lock guards
+    cursor interleaving rather than the file.
     """
-    conn = sqlite3.connect(str(path))
+    conn = sqlite3.connect(str(path), check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     return conn

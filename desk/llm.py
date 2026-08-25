@@ -102,6 +102,10 @@ class Completion:
 
     content: str
     call: LLMCall
+    #: The provider's raw response. Needed by desk/llm_bridge.py to recover
+    #: tool calls, which `content` alone cannot carry. Deliberately last and
+    #: defaulted so existing callers are untouched.
+    raw: Any = None
 
 
 class LLMGateway:
@@ -257,7 +261,7 @@ class LLMGateway:
         # while processing the answer must not lose the fact that it was paid
         # for. Un-billed spend is the failure mode a ceiling cannot survive.
         self._ledger.record(call)
-        return Completion(content=_content_of(response), call=call)
+        return Completion(content=_content_of(response), call=call, raw=response)
 
     def _invoke(self, **kwargs: Any) -> Any:
         if self._completion_fn is not None:

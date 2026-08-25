@@ -78,9 +78,36 @@ Macro has tools, neither has a node.
 | Item | Status |
 |---|---|
 | ~~**Repointing `engine/dataflows/` at `desk/data.py`**~~ — **RESOLVED in T7.** `desk/data.py` serves six of the seven analysts (technical, fundamentals, estimates, flow/ownership, options, macro). News/sentiment uses the engine's own `yfinance_news` dataflow, because the MarketData Protocol has no news method and adding one is a T2 change. **Measured: that dataflow needs no API key.** Both paths are yfinance underneath — one provider reached two ways, not two providers, which is why this is acceptable rather than merely tolerated. The engine's five vendored analysts are **not used** by the committee graph at all. |
-| **A quality-gate node** between the analysts and the bull/bear debate — grade each analyst report, reject empty/short ones and LLM-failure markers ("I cannot retrieve", "unable to fetch"). Pattern read from `simonlin1212/TradingAgents-astock` (Apache-2.0); ~40 lines against our schema. | Folded into **T7**. Attribute if code is lifted. |
-| **T8 must annualise Sharpe explicitly** and assert the convention in a test. `financetoolkit.get_sharpe_ratio` is per-period; `empyrical`/`quantstats` annualise. 15.88× apart under an identical name. | **T8** |
+| ~~**A quality-gate node** between the analysts and the bull/bear debate~~ — **DONE in T7.** `desk/quality_gate.py`; pattern attributed, no code copied. |
+| ~~**T8 must annualise Sharpe explicitly**~~ — **DONE.** `desk/eval_metrics.annualised_sharpe` states the convention in its name; `per_period_sharpe` exists only so a test can measure the gap. **Measured 2026-08-21: 15.87×**, matching the recorded 15.88×. DanisHack's own Sharpe is already annualised, so the concern did not apply to the port. | **T8 ✓** |
 | **`rev Q/Q` is single-sourced on yfinance** at the $19 FMP tier (Starter is *annual* fundamentals). A licensed fallback for it costs $49. | Accepted caveat. Revisit at T18. |
+
+## Corrections to an adopted upstream, found by the verification VENDORING.md required (T8)
+
+`VENDORING.md` §6 says: "Where a ported module gates a real decision —
+`_analyze_trades` feeding T8's expectancy number — verify it independently
+against a hand-built fixture before trusting it." Done, at `6d7a3ab`:
+
+    buy 1 @ 100, sell @ 110      ->    +$10
+    buy 1000 @ 100, sell @ 95    ->  -$5,000
+                                      net -$4,990
+
+    DanisHack reports: win_rate 50.0%, profit_factor 2.00
+
+**A profit factor of 2.00 for a strategy that lost $4,990.** Five defects:
+
+| # | Defect | Consequence |
+|---|---|---|
+| 1 | a round trip is appended **once per FIFO match, unweighted by quantity** | a 1-share match counts as much as a 1000-share one |
+| 2 | `profit_factor` sums **percentages**, not currency | meaningless across unequal position sizes |
+| 3 | returns come from **raw trade prices** — gross, not net | contradicts T8's "after spread, slippage, and commission" |
+| 4 | a **flat** round trip is counted as a loss | biases win rate down, inflates the loss side |
+| 5 | a sell with **no matching buy is silently discarded** | short sales and data gaps vanish |
+
+**Resolution: `_analyze_trades` is NOT ported.** `desk/eval_metrics.py`
+computes expectancy in currency, quantity-weighted and net of costs.
+DanisHack's Sharpe, drawdown and benchmark are sound and are used as written.
+This does not reflect on the modules T4 took, which were verified separately.
 
 ## Not decided by the ADR
 

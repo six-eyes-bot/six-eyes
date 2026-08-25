@@ -19,6 +19,21 @@ dependencies = [
     "finvizfinance",    # SCREENER ONLY - ticker_fundament() is broken upstream
     "financetoolkit",   # metrics, ratios, technicals, CAPM; forces pandas 3.0.5
     "litellm",          # LLM gateway; binds the Python ceiling at <3.15
+    # ADR 0001 adopts langgraph and justified it as "already transitive via
+    # TradingAgents -- 0 net new packages". That accounting assumed
+    # TradingAgents would be INSTALLED. T1 vendored it as source and
+    # deliberately omitted its pyproject.toml, so the transitive deps never
+    # arrived and the engine was inert: every one of its analysts, its graph
+    # and its LLM clients failed to import.
+    #
+    # Measured 2026-08-21: these two pull 17 net-new packages and make the
+    # engine importable. The full engine declaration would pull 38 -- the
+    # extra 21 are langchain-anthropic / langchain-openai /
+    # langchain-google-genai and friends under engine/tradingagents/llm_clients/,
+    # which are REDUNDANT: T2 routes every model call through litellm.
+    "langgraph",        # committee graph (T7); engine/graph imports it
+    "langchain-core",   # engine/agents imports it in 14 places
+    "stockstats",       # engine/dataflows/stockstats_utils.py, on the analyst path
     "langfuse",         # per-step tracing
     "pydantic",
     "pyyaml",

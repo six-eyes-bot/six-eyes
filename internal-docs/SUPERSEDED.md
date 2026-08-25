@@ -4,7 +4,7 @@
 
 This file exists so the drift is greppable. **Where the two disagree, the ADR wins.**
 
-*Last reconciled: 2026-08-21 against `main` @ ef220f5.*
+*Last reconciled: 2026-08-21 against `main` @ ebf79bc.*
 
 ---
 
@@ -40,6 +40,38 @@ Also settled by T3: `runs.token_cost` (§4) is **one row per run with one model
 column**, which cannot hold the per-agent, per-model cost of a ~16-call
 committee. T2's per-call spend ledger lives outside this database and
 `runs.token_cost == SpendLedger.total_for_run(run_id)`.
+
+## Corrections to ADR 0001 itself, found in implementation (T6)
+
+| ADR says | Measured | Resolution |
+|---|---|---|
+| **`langgraph` — "Already transitive via (1) — 0 net new packages"** (Decision table row 3) | **False as built.** That accounting assumed TradingAgents would be *installed*. T1 vendored it as source and deliberately omitted its `pyproject.toml` (VENDORING.md §4b), so the transitive dependencies never arrived. The engine was **inert**: all five of its analysts, its graph and its LLM clients failed to import | `langgraph`, `langchain-core` and `stockstats` added to `pyproject.toml` as **direct** dependencies. Measured 2026-08-21: **17 net-new packages**, 106 → 123 |
+| the recommended set is **142 packages** | 123 after this change, so the ADR's own budget is **not exceeded** — it was never reached, because the vendoring dropped the transitive set | No re-scoring needed. Economy is better than the ADR assumed, not worse |
+
+**Deliberately still absent: `langchain-anthropic`, `langchain-openai`, `langchain-google-genai`, `langchain-aws`.** The engine's full declaration would pull **38** net-new rather than 17; the extra 21 exist only for `engine/tradingagents/llm_clients/`, which is **redundant** — T2 routes every model call through litellm. Nothing on the analyst or graph path imports them. **T7 must route the committee through `desk/llm.py` rather than the engine's own clients**, or it will pull those 21 back in.
+
+## T6 audit result — "port rather than write" had nothing to port
+
+T6 says to audit the base fork and `virattt/ai-hedge-fund` before authoring.
+Measured 2026-08-21:
+
+| DESK_DESIGN §1 W2 analyst | Vendored engine | virattt | Verdict |
+|---|---|---|---|
+| Technical | `market_analyst.py` | — | exists |
+| Fundamentals | `fundamentals_analyst.py` | — | exists |
+| News/Sentiment | `news_` + `sentiment_` + `social_media_` | — | exists |
+| Estimates | **absent** | **absent** | written |
+| Flow/Ownership | **absent** | **absent** | written |
+| Options | **absent** | **absent** | written |
+| Macro | tools only (`macro_data_tools.py`), **no node** | **absent** | written |
+
+**`virattt/ai-hedge-fund` no longer has analyst nodes at all.** At
+`eff8a732` it has been restructured into a quant library: `hedge_fund/signals/`
+holds investor personas (buffett, munger, graham, lynch, druckenmiller, pead),
+plus `data/protocol.py`, `features/`, `backtesting/` and a TUI. The ADR
+evaluated a differently-shaped repository. The ticket's guess that "Estimates
+and Macro probably exist in one of the two trees already" was half right:
+Macro has tools, neither has a node.
 
 ## Added, with no ticket that owns them
 
